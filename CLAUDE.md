@@ -55,10 +55,14 @@ user's browser can reach `127.0.0.1`.
 - Package names and versions are validated before reaching a subprocess, and commands
   are spawned with an argv array and `shell: false`. Package names may not begin with
   `-`, or a package manager would parse them as flags.
-- READMEs are untrusted third-party text. They go through the restricted renderer in
-  `src/ui/composables/markdown.ts`, which escapes everything, emits only tags it builds
-  itself, allows only http/https/mailto hrefs, and renders images as alt text rather
-  than fetching them.
+- READMEs are untrusted third-party text. They go through the renderer in
+  `src/ui/composables/markdown.ts`, which is safe by construction: raw HTML is
+  translated to Markdown *before* escaping and any untranslated tag is dropped, so
+  nothing from the source reaches the output as markup. `script`/`style`/`iframe`
+  elements are removed with their contents, hrefs must be http/https/mailto, and
+  images become alt text rather than being fetched.
+  Do not "improve" this by passing HTML through — the visible-noise problem it solves
+  has a safe fix, and rendering registry HTML directly does not.
 
 `test/server.test.ts`, `test/static.test.ts`, `test/markdown.test.ts` and
 `test/mutate.test.ts` cover these. Do not weaken them.

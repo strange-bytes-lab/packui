@@ -385,4 +385,52 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
   border-inline-start: 2px solid var(--border-strong);
   color: var(--text-muted);
 }
+
+.readme :deep(ul),
+.readme :deep(ol) {
+  padding-inline-start: var(--space-5);
+}
+
+.readme :deep(li) {
+  margin-block: 2px;
+}
+
+/* READMEs lean on tables for option reference; they need to stay readable in a
+   narrow drawer, so the container scrolls rather than the page. */
+.readme :deep(table) {
+  display: block;
+  inline-size: 100%;
+  margin-block: var(--space-3);
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.readme :deep(th),
+.readme :deep(td) {
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  vertical-align: top;
+  border: 1px solid var(--border);
+}
+
+.readme :deep(th) {
+  font-weight: 600;
+  background: var(--bg-sunken);
+  white-space: nowrap;
+}
+
+.readme :deep(hr) {
+  margin-block: var(--space-4);
+  border: none;
+  border-block-start: 1px solid var(--border);
+}
+
+.readme :deep(p) {
+  margin-block: var(--space-3);
+}
+
+.readme :deep(del) {
+  color: var(--text-faint);
+}
 </style>
