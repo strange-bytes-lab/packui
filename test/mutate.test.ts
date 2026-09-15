@@ -317,3 +317,46 @@ describe('snapshots', () => {
     expect(listed.map((s) => s.id)).toContain(first.id)
   })
 })
+
+describe('batch upgrades', () => {
+  it('groups packages by kind so save flags stay correct', async () => {
+    const { buildBatchCommands } = await import('../src/server/core/commands.ts')
+
+    const commands = buildBatchCommands('pnpm', [
+      { action: 'upgrade', name: 'vue', version: '3.5.13', kind: 'prod' },
+      { action: 'upgrade', name: 'vite', version: '8.0.0', kind: 'dev' },
+      { action: 'upgrade', name: 'pinia', version: '3.0.0', kind: 'prod' },
+    ])
+
+    expect(commands).toHaveLength(2)
+
+    const prod = commands.find((c) => !c.args.includes('-D'))
+    const dev = commands.find((c) => c.args.includes('-D'))
+
+    // A devDependency must never ride along in the prod invocation, or the save
+    // flag would move it into dependencies.
+    expect(prod?.args).toEqual(expect.arrayContaining(['vue@3.5.13', 'pinia@3.0.0']))
+    expect(prod?.args).not.toContain('vite@8.0.0')
+    expect(dev?.args).toContain('vite@8.0.0')
+  })
+
+  it('installs a single-kind batch in one invocation', async () => {
+    const { buildBatchCommands } = await import('../src/server/core/commands.ts')
+    const commands = buildBatchCommands('npm', [
+      { action: 'upgrade', name: 'a', version: '1.0.0', kind: 'prod' },
+      { action: 'upgrade', name: 'b', version: '2.0.0', kind: 'prod' },
+    ])
+    expect(commands).toHaveLength(1)
+    expect(commands[0]?.display).toBe('npm install a@1.0.0 b@2.0.0')
+  })
+
+  it('rejects the whole batch if any entry is invalid', async () => {
+    const { buildBatchCommands } = await import('../src/server/core/commands.ts')
+    expect(() =>
+      buildBatchCommands('npm', [
+        { action: 'upgrade', name: 'vue', version: '3.5.13', kind: 'prod' },
+        { action: 'upgrade', name: 'evil; rm -rf /', version: '1.0.0', kind: 'prod' },
+      ]),
+    ).toThrow('Invalid package name')
+  })
+})

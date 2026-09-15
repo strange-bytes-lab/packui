@@ -99,6 +99,40 @@ export function buildCommand(
   }
 }
 
+/**
+ * Builds the commands for upgrading several packages at once.
+ *
+ * Specs are grouped by dependency kind because the save flag differs per kind and
+ * applies to the whole invocation — mixing a devDependency into a `--save-prod`
+ * command would move it. Each group is one package manager invocation, which is far
+ * faster than one per package and lets the package manager resolve them together.
+ */
+export function buildBatchCommands(
+  packageManager: PackageManager,
+  requests: readonly MutationRequest[],
+): BuiltCommand[] {
+  const byKind = new Map<DependencyKind, MutationRequest[]>()
+  for (const request of requests) {
+    if (!isValidPackageName(request.name)) {
+      throw new Error(`Invalid package name: ${request.name}`)
+    }
+    const version = request.version ?? 'latest'
+    if (!isValidVersion(version)) throw new Error(`Invalid version: ${version}`)
+
+    const group = byKind.get(request.kind) ?? []
+    group.push(request)
+    byKind.set(request.kind, group)
+  }
+
+  const verb = packageManager === 'npm' ? 'install' : 'add'
+
+  return [...byKind.entries()].map(([kind, group]) => {
+    const specs = group.map((request) => `${request.name}@${request.version ?? 'latest'}`)
+    const args = [verb, ...specs, ...saveFlags(packageManager, kind)]
+    return { command: packageManager, args, display: `${packageManager} ${args.join(' ')}` }
+  })
+}
+
 /** The plain install used to put a project back in sync after a rollback. */
 export function buildInstallCommand(packageManager: PackageManager): BuiltCommand {
   const args = ['install']

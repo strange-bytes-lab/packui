@@ -9,13 +9,20 @@ import type { DependencyKind } from '@shared/types'
  * is still server-sent events, so the server side stays conventional.
  */
 
+export interface BatchPackage {
+  name: string
+  version: string
+  kind: DependencyKind
+}
+
 export interface PendingMutation {
   action: 'upgrade' | 'remove'
-  name: string
+  /** Set for a single-package mutation. */
+  name?: string
   version?: string
-  kind: DependencyKind
-  /** Filled in by the server before anything runs, so the user sees the real command. */
-  display?: string
+  kind?: DependencyKind
+  /** Set instead of name/version when upgrading several packages at once. */
+  packages?: BatchPackage[]
 }
 
 export type MutationPhase = 'idle' | 'confirming' | 'running' | 'succeeded' | 'failed'
