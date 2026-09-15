@@ -33,6 +33,15 @@ const enriching = ref(false)
 const error = ref<string | null>(null)
 const enrichError = ref<string | null>(null)
 
+/**
+ * Enrichment is slow and the sidebar is fast, so a response can arrive after the user
+ * has already switched lists. Rows are matched by name, which hides most of it — but a
+ * package present in both lists would take the wrong version data, which is exactly the
+ * kind of quiet wrongness this tool exists to catch elsewhere.
+ */
+let enrichGeneration = 0
+let enrichInFlight: AbortController | null = null
+
 /** Query string identifying the current selection, shared by every endpoint. */
 function selectionQuery(): string {
   return selection.value.kind === 'global'
@@ -77,11 +86,23 @@ export async function load(target: Selection = selection.value): Promise<void> {
 export const loadProject = load
 
 async function enrich(): Promise<void> {
+  const generation = ++enrichGeneration
+
+  // The server honours the abort and stops its registry work, so this is not just a
+  // client-side discard.
+  enrichInFlight?.abort()
+  const controller = new AbortController()
+  enrichInFlight = controller
+
   enriching.value = true
   enrichError.value = null
 
   try {
-    const { rows } = await apiFetch<{ rows: EnrichedRow[] }>(`/enrich${selectionQuery()}`)
+    const { rows } = await apiFetch<{ rows: EnrichedRow[] }>(`/enrich${selectionQuery()}`, {
+      signal: controller.signal,
+    })
+    if (generation !== enrichGeneration) return
+
     const byName = new Map(rows.map((row) => [row.name, row]))
     const current = report.value
     if (current === null) return
@@ -98,11 +119,13 @@ async function enrich(): Promise<void> {
       }
     })
   } catch (cause) {
+    // A superseded request is not a failure; the newer one owns the state now.
+    if (generation !== enrichGeneration) return
     // The local half of the table is still valid and still shown; only the
     // registry-derived columns are missing.
     enrichError.value = cause instanceof Error ? cause.message : 'Could not reach the registry'
   } finally {
-    enriching.value = false
+    if (generation === enrichGeneration) enriching.value = false
   }
 }
 
