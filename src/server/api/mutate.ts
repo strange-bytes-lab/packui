@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http'
 import { createSnapshot, listSnapshots, restoreSnapshot } from '../core/backup.ts'
 import {
+  buildBatchCommands,
   buildCommand,
   buildInstallCommand,
   type MutationAction,
@@ -31,6 +32,29 @@ interface MutateBody {
   version?: unknown
   kind?: unknown
   snapshotId?: unknown
+  /** Present instead of name/version when upgrading several packages at once. */
+  packages?: unknown
+}
+
+interface BatchEntry {
+  name: string
+  version: string
+  kind: DependencyKind
+}
+
+function readBatch(value: unknown): BatchEntry[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const entries: BatchEntry[] = []
+  for (const item of value) {
+    const entry = item as Record<string, unknown>
+    if (typeof entry.name !== 'string' || typeof entry.version !== 'string') return null
+    entries.push({
+      name: entry.name,
+      version: entry.version,
+      kind: KINDS.has(entry.kind as DependencyKind) ? (entry.kind as DependencyKind) : 'prod',
+    })
+  }
+  return entries
 }
 
 async function readJsonBody(ctx: RequestContext): Promise<MutateBody> {
@@ -84,11 +108,12 @@ export function createMutateHandler(access: ProjectAccess) {
       sendError(res, 400, 'action must be "upgrade" or "remove"')
       return
     }
-    if (typeof body.name !== 'string') {
-      sendError(res, 400, 'name is required')
+
+    const batch = readBatch(body.packages)
+    if (batch === null && typeof body.name !== 'string') {
+      sendError(res, 400, 'name or packages is required')
       return
     }
-    const kind = KINDS.has(body.kind as DependencyKind) ? (body.kind as DependencyKind) : 'prod'
 
     const detection = await detectPackageManager(projectPath)
     if (detection.packageManager === null) {
@@ -96,16 +121,26 @@ export function createMutateHandler(access: ProjectAccess) {
       return
     }
 
-    const request: MutationRequest = {
-      action: action satisfies MutationAction,
-      name: body.name,
-      version: typeof body.version === 'string' ? body.version : undefined,
-      kind,
-    }
-
-    let built
+    let commands: ReturnType<typeof buildCommand>[]
     try {
-      built = buildCommand(detection.packageManager, request)
+      if (batch !== null) {
+        if (action !== 'upgrade') {
+          sendError(res, 400, 'Batch requests support upgrade only')
+          return
+        }
+        commands = buildBatchCommands(
+          detection.packageManager,
+          batch.map((entry) => ({ action: 'upgrade' as const, ...entry })),
+        )
+      } else {
+        const request: MutationRequest = {
+          action: action satisfies MutationAction,
+          name: body.name as string,
+          version: typeof body.version === 'string' ? body.version : undefined,
+          kind: KINDS.has(body.kind as DependencyKind) ? (body.kind as DependencyKind) : 'prod',
+        }
+        commands = [buildCommand(detection.packageManager, request)]
+      }
     } catch (error) {
       sendError(res, 400, error instanceof Error ? error.message : 'Invalid request')
       return
@@ -117,22 +152,33 @@ export function createMutateHandler(access: ProjectAccess) {
     try {
       await withProjectLock(projectPath, async () => {
         const send = openStream(res)
-        send('command', { display: built.display })
+        send('command', { display: commands.map((c) => c.display).join('\n') })
 
-        const snapshot = await createSnapshot(projectPath, built.display)
+        // One snapshot covers the whole batch, so a partial failure part-way through
+        // rolls back to the state before any of it ran.
+        const snapshot = await createSnapshot(projectPath, commands[0]?.display ?? 'mutation')
         send('snapshot', { id: snapshot.id, files: snapshot.files })
 
-        const result = await runCommand(
-          projectPath,
-          built,
-          (event) => send('output', event),
-          controller.signal,
-        )
+        let failure: { code: number | null; error: string | null } | null = null
+
+        for (const built of commands) {
+          if (commands.length > 1) send('output', { type: 'stdout', text: `\n$ ${built.display}\n` })
+          const result = await runCommand(
+            projectPath,
+            built,
+            (event) => send('output', event),
+            controller.signal,
+          )
+          if (result.error !== null || result.code !== 0) {
+            failure = { code: result.code, error: result.error }
+            break
+          }
+        }
 
         send('done', {
-          ok: result.error === null && result.code === 0,
-          code: result.code,
-          error: result.error,
+          ok: failure === null,
+          code: failure?.code ?? 0,
+          error: failure?.error ?? null,
           snapshotId: snapshot.id,
         })
         res.end()

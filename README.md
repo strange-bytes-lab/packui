@@ -22,10 +22,25 @@ Works with **npm, pnpm, yarn and bun**.
 Installing packui installs packui. Nothing else. The UI and server are bundled at
 build time, so the published package declares no dependencies at all.
 
+## What it does
+
+- One row per dependency: declared range, installed version, latest, how far behind,
+  vulnerability state and lockfile alignment
+- Upgrade or remove a package, or upgrade everything outdated in one go — packui runs
+  your project's own package manager and shows you the command first
+- Backs up `package.json` and the lockfile before every change, with one-click rollback
+- A drawer per package: readme, full version history, advisory detail with the versions
+  that fix each one, and links to the repository and its releases
+- Five themes, light and dark, following your system preference by default
+
+Vulnerability data comes from [OSV.dev](https://osv.dev); version and deprecation data
+from the npm registry. Both are cached under `~/.packui`, and packui degrades to cached
+or local data when offline rather than claiming everything is fine.
+
 ## Status
 
-Early. See `CLAUDE.md` for architecture, the security model and contribution
-conventions.
+Early, but the full loop works. See `CLAUDE.md` for architecture, the security model
+and contribution conventions.
 
 ## Development
 

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AlignmentBanner from '@/components/AlignmentBanner.vue'
 import DependencyTable from '@/components/DependencyTable.vue'
 import MutationConsole from '@/components/MutationConsole.vue'
 import PackageDrawer from '@/components/PackageDrawer.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import { useFilters } from '@/composables/useFilters'
-import { requestMutation } from '@/composables/useMutation'
+import { requestMutation, type BatchPackage } from '@/composables/useMutation'
 import { loadProject, useProject } from '@/stores/useProject'
 import type { DependencyRow } from '@shared/types'
 
@@ -14,6 +14,43 @@ const { report, loading, enriching, error, enrichError, project, dependencies } 
 const { query, kind, problemsOnly, filtered } = useFilters(dependencies)
 
 const selectedPackage = ref<string | null>(null)
+const searchInput = ref<HTMLInputElement | null>(null)
+
+/**
+ * Keyboard shortcuts, deliberately few: "/" to jump to the filter and Escape to
+ * clear it. Both are ignored while typing in a field, so they never swallow input.
+ */
+function onKeydown(event: KeyboardEvent): void {
+  const target = event.target as HTMLElement | null
+  const typing =
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLTextAreaElement
+
+  if (event.key === '/' && !typing) {
+    event.preventDefault()
+    searchInput.value?.focus()
+    return
+  }
+
+  if (event.key === 'Escape' && target === searchInput.value && query.value !== '') {
+    // Let Escape clear the filter first; a second press can close anything above it.
+    event.stopPropagation()
+    query.value = ''
+  }
+}
+
+/** Everything with a known newer version. Vulnerable packages sort to the front. */
+const outdated = computed<BatchPackage[]>(() =>
+  dependencies.value
+    .filter((row) => row.latest !== null && row.outdated !== 'current' && row.outdated !== 'unknown')
+    .map((row) => ({ name: row.name, version: row.latest as string, kind: row.kind })),
+)
+
+function upgradeAll(): void {
+  if (outdated.value.length === 0) return
+  requestMutation({ action: 'upgrade', packages: outdated.value })
+}
 
 function upgradeRow(row: DependencyRow): void {
   if (row.latest === null) return
@@ -31,7 +68,12 @@ function upgradeToVersion(name: string, version: string): void {
   selectedPackage.value = null
 }
 
-onMounted(() => void loadProject())
+onMounted(() => {
+  void loadProject()
+  window.addEventListener('keydown', onKeydown)
+})
+
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -41,10 +83,11 @@ onMounted(() => void loadProject())
     <main class="content">
       <header class="toolbar">
         <input
+          ref="searchInput"
           v-model="query"
           type="search"
           class="search"
-          placeholder="Filter packages…"
+          placeholder="Filter packages…  /"
           aria-label="Filter packages by name"
         />
         <div class="toolbar-group">
@@ -59,6 +102,14 @@ onMounted(() => void loadProject())
           </label>
           <button type="button" :disabled="loading" @click="loadProject()">
             {{ loading ? 'Refreshing…' : 'Refresh' }}
+          </button>
+          <button
+            v-if="outdated.length > 0"
+            type="button"
+            class="cta"
+            @click="upgradeAll"
+          >
+            Upgrade all ({{ outdated.length }})
           </button>
         </div>
       </header>
@@ -78,7 +129,16 @@ onMounted(() => void loadProject())
           {{ filtered.length }} of {{ dependencies.length }} dependencies
           <span v-if="enriching" class="summary-note">· checking the registry…</span>
         </p>
+
+        <div v-if="dependencies.length === 0" class="empty-state">
+          <p class="empty-title">This project has no dependencies.</p>
+          <p class="empty-body">
+            Nothing to audit yet. Add a package and refresh.
+          </p>
+        </div>
+
         <DependencyTable
+          v-else
           :rows="filtered"
           @select="selectedPackage = $event"
           @upgrade="upgradeRow"
@@ -154,6 +214,12 @@ button:disabled {
   cursor: progress;
 }
 
+.cta {
+  color: var(--accent-contrast);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .checkbox {
   display: flex;
   gap: var(--space-2);
@@ -191,6 +257,24 @@ button:disabled {
 }
 
 .summary-note {
+  color: var(--text-muted);
+}
+
+.empty-state {
+  padding: var(--space-6);
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.empty-title {
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+}
+
+.empty-body {
+  margin: 0;
+  font-size: 13px;
   color: var(--text-muted);
 }
 </style>

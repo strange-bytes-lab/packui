@@ -41,17 +41,42 @@ test/              Vitest suites; fixture projects under test/fixtures/
 
 ## Security model
 
-The API can execute package manager commands against real projects, so it is treated
-as a privileged surface. Loopback binding is **not** a boundary on its own — any page
-in the user's browser can reach `127.0.0.1`.
+The API executes package manager commands against real projects, so it is treated as a
+privileged surface. Loopback binding is **not** a boundary on its own — any page in the
+user's browser can reach `127.0.0.1`.
 
 - Bind `127.0.0.1` explicitly. Never `0.0.0.0`.
 - Every `/api/*` request must carry the per-session token (`Authorization: Bearer`, or
   `?t=` on first load). The token is regenerated each boot and never written to disk.
 - Mutating methods additionally require a loopback `Origin` (DNS-rebinding defense).
 - Static serving must never resolve outside `dist/ui`.
+- Project paths from the client are resolved and checked against an allowlist.
+- Package names and versions are validated before reaching a subprocess, and commands
+  are spawned with an argv array and `shell: false`. Package names may not begin with
+  `-`, or a package manager would parse them as flags.
+- READMEs are untrusted third-party text. They go through the restricted renderer in
+  `src/ui/composables/markdown.ts`, which escapes everything, emits only tags it builds
+  itself, allows only http/https/mailto hrefs, and renders images as alt text rather
+  than fetching them.
 
-`test/server.test.ts` and `test/static.test.ts` cover these. Do not weaken them.
+`test/server.test.ts`, `test/static.test.ts`, `test/markdown.test.ts` and
+`test/mutate.test.ts` cover these. Do not weaken them.
+
+## Mutation model
+
+Every write follows one path: take the project lock, snapshot `package.json` and the
+lockfile, run the project's own package manager, stream its output, report the result.
+
+- **Never edit `package.json` or a lockfile directly.** Shell out to the project's
+  package manager and let it own its lockfile format and resolution.
+- **Snapshot before running, not after succeeding** (`core/backup.ts`), so a failure
+  part-way through is recoverable. Rollback snapshots the broken state first, so the
+  rollback is itself undoable.
+- **One mutation at a time per project** (`withProjectLock`). Concurrent package
+  manager processes corrupt lockfiles.
+- **Choose the save flag from the dependency's current kind**, or an upgrade will move
+  a devDependency into `dependencies`. Batch upgrades group by kind for this reason.
+- **Show the command before running it.**
 
 ## Browser support policy
 
@@ -76,5 +101,15 @@ popovers and version dropdowns. There is no component library and should not be 
 - Installed versions are read from `node_modules/<pkg>/package.json`, not from
   lockfiles — that field is identical across npm, pnpm, yarn and bun, whereas
   `bun.lockb` is binary and `pnpm-lock.yaml` would need a YAML parser we do not ship.
-- Mutations run the project's own package manager rather than editing `package.json`
-  or lockfiles directly, so the package manager stays the authority on its lockfile.
+- READMEs come from `node_modules/<pkg>/README.md`, not the registry. The registry
+  returns an empty `readme` field on the packument and none at all on per-version
+  documents (verified against minimist and vue). Reading locally is also more accurate,
+  since it is the readme for the version actually installed.
+- Latest versions and deprecation come from the *abbreviated* packument
+  (`Accept: application/vnd.npm.install-v1+json`); the full document is megabytes for
+  popular packages. Requests are ETag-aware and cached under `~/.packui`.
+- Vulnerabilities come from OSV.dev, not `npm audit`, so one code path covers all four
+  package managers. Severity requires a per-advisory request, so only packages that
+  actually have advisories pay for it.
+- Every network path degrades to cached data, then to `null`, which the UI renders as
+  "not checked" rather than "up to date". Never invent a clean bill of health.
