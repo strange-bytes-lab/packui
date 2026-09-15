@@ -15,31 +15,29 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  # Everything whose answer cannot depend on the platform or the Node version, run
+  # once each. Splitting them keeps one run reporting every failing stage.
+  check:
     name: ${{ matrix.task.name }}
     runs-on: ubuntu-latest
     strategy:
-      # Report every failing stage in one run rather than stopping at the first.
       fail-fast: false
       matrix:
         task:
+          - name: lint
+            run: pnpm lint
+          - name: format
+            run: pnpm format:check
           - name: typecheck
             run: pnpm typecheck
-          - name: test
-            run: pnpm test
-          - name: build
-            run: pnpm build
           - name: no runtime dependencies
             run: pnpm verify:deps
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
-          # Matches the engines field; the server bundle targets node22.
           node-version: 22
           cache: pnpm
 
@@ -48,6 +46,35 @@ jobs:
 
       - name: ${{ matrix.task.name }}
         run: ${{ matrix.task.run }}
+
+  # The parts that can differ. `engines` claims >=22, so both 22 and 24 are tested
+  # rather than assumed, and macOS is here because the global-scope layouts (volta,
+  # Homebrew, nvm) are filesystem conventions that differ per platform.
+  test:
+    name: test · node ${{ matrix.node }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
 
   # The one thing that cannot be checked by running a script: the package must still
   # start and serve the UI once built, from the published file list alone.
@@ -85,6 +112,16 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:7225/")
           [ "$code" = "200" ] || { echo "UI returned $code"; exit 1; }
 
+          # ...under a policy with no 'unsafe-inline'. The README renderer's second layer.
+          policy=$(curl -s -D - -o /dev/null "http://127.0.0.1:7225/" | tr -d '\r' \
+            | grep -i '^content-security-policy:')
+          echo "$policy"
+          case "$policy" in
+            *unsafe-inline*) echo "CSP allows inline script"; exit 1 ;;
+            *"script-src 'self'"*) ;;
+            *) echo "no usable content-security-policy on the shell"; exit 1 ;;
+          esac
+
           # The API must answer with a valid token.
           code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:7225/api/deps?t=$token")
           [ "$code" = "200" ] || { echo "authorised API call returned $code"; exit 1; }
@@ -99,5 +136,12 @@ jobs:
             -d '{"action":"remove","name":"x","confirm":"x"}' \
             "http://127.0.0.1:7225/api/mutate?t=$token")
           [ "$code" = "403" ] || { echo "cross-origin mutation returned $code, expected 403"; exit 1; }
+
+          # ...including the dev server's port, which is only trusted while PACKUI_DEV is set.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Origin: http://localhost:7332' -H 'content-type: application/json' \
+            -d '{"action":"remove","name":"x","confirm":"x"}' \
+            "http://127.0.0.1:7225/api/mutate?t=$token")
+          [ "$code" = "403" ] || { echo "dev-origin mutation returned $code, expected 403"; exit 1; }
 
           echo "smoke checks passed"
