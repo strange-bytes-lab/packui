@@ -44,9 +44,23 @@ export class Router {
   }
 }
 
+/**
+ * Sent on every response, API and static alike.
+ *
+ * `nosniff` matters because a README's text can reach a response body; without it a
+ * browser is free to guess a content type we did not send. `no-referrer` keeps the
+ * session token out of the Referer header on the first load, before the UI has
+ * stripped it from the address bar.
+ */
+export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+}
+
 export function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body)
   res.writeHead(status, {
+    ...SECURITY_HEADERS,
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload),
     'cache-control': 'no-store',

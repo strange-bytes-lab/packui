@@ -1,4 +1,5 @@
 import semver from 'semver'
+import { isValidPackageName } from '../core/commands.ts'
 import { fetchAdvisory, queryVulnerabilities, type AdvisoryDetail } from '../core/osv.ts'
 import { fetchPackageDetail, fetchPackageInfo, type PackageDetail } from '../core/registry.ts'
 import { readInstalledVersion } from '../core/installed.ts'
@@ -66,9 +67,9 @@ export function createPackageHandler(access: ProjectAccess) {
     }
 
     const name = url.searchParams.get('name')
-    // Package names are used to build a registry URL, so reject anything that is
-    // not a plausible npm name rather than passing it through.
-    if (name === null || !/^(@[\w.-]+\/)?[\w.-]+$/.test(name)) {
+    // The name is joined into a filesystem path and into a registry URL, so it goes
+    // through the same validator as the one that reaches a subprocess.
+    if (name === null || !isValidPackageName(name)) {
       sendError(res, 400, 'Invalid package name')
       return
     }

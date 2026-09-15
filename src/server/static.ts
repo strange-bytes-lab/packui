@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises'
 import type { ServerResponse } from 'node:http'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SECURITY_HEADERS } from './router.ts'
 
 /** The built SPA lives at dist/ui; this module is bundled to dist/server/index.js. */
 const uiRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '../ui')
@@ -19,6 +20,28 @@ const MIME_TYPES: Record<string, string> = {
 }
 
 /**
+ * The second layer under the README renderer.
+ *
+ * `composables/markdown.ts` is safe by construction and stays that way; this is what
+ * makes a future bug in it non-exploitable rather than merely unlikely. Everything the
+ * UI needs is same-origin, so the policy can be this narrow: no inline script (the
+ * theme bootstrap is a real file for exactly this reason), no remote anything, and no
+ * framing. `data:` is allowed for images only because the bundler inlines small icons;
+ * a README's images never become <img> at all.
+ */
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join('; ')
+
+/**
  * Resolves a URL pathname to a file inside the UI root, or null if it escapes.
  * Normalizing before joining is what stops `../` traversal.
  */
@@ -32,7 +55,7 @@ function resolveWithinUiRoot(pathname: string): string | null {
 export async function serveStatic(pathname: string, res: ServerResponse): Promise<void> {
   const resolved = resolveWithinUiRoot(pathname === '/' ? '/index.html' : pathname)
   if (resolved === null) {
-    res.writeHead(403).end('Forbidden')
+    res.writeHead(403, SECURITY_HEADERS).end('Forbidden')
     return
   }
 
@@ -46,22 +69,26 @@ export async function serveStatic(pathname: string, res: ServerResponse): Promis
   }
 
   if (info === null) {
-    res.writeHead(404, { 'content-type': 'text/plain' })
+    res.writeHead(404, { ...SECURITY_HEADERS, 'content-type': 'text/plain' })
     res.end('packui UI is not built. Run `pnpm build:ui`.')
     return
   }
 
   const ext = extname(filePath)
-  // Vite fingerprints hashed assets, so they are safe to cache forever.
-  // index.html must never be, or upgrades would not be picked up.
-  const cacheControl = filePath.endsWith('index.html')
-    ? 'no-cache'
-    : 'public, max-age=31536000, immutable'
+  const isHtml = ext === '.html'
+
+  // Only Vite's fingerprinted output is safe to cache forever. Anything else — the
+  // shell, the theme bootstrap — keeps its name across releases, so caching it
+  // immutably would pin users to whichever version they first loaded.
+  const isFingerprinted = filePath.startsWith(join(uiRoot, 'assets') + sep)
 
   res.writeHead(200, {
+    ...SECURITY_HEADERS,
     'content-type': MIME_TYPES[ext] ?? 'application/octet-stream',
     'content-length': info.size,
-    'cache-control': cacheControl,
+    'cache-control': isFingerprinted ? 'public, max-age=31536000, immutable' : 'no-cache',
+    // Only the document needs a policy; it governs everything it then loads.
+    ...(isHtml ? { 'content-security-policy': CONTENT_SECURITY_POLICY } : {}),
   })
   createReadStream(filePath).pipe(res)
 }
