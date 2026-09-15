@@ -6,12 +6,17 @@ import { sessionToken } from '../src/server/security.ts'
  * The API can run package manager commands against real projects, so these are
  * not incidental checks — they are the boundary that makes the server safe to run.
  */
+/**
+ * Tests always bind port 0 so the OS assigns a free one. The production default is a
+ * fixed port, and several servers run per file (plus files in parallel), so inheriting
+ * that default makes them race for the same port range.
+ */
 describe('server security boundary', () => {
   let server: RunningServer
   let base: string
 
   beforeAll(async () => {
-    server = await startServer({ projectPath: process.cwd() })
+    server = await startServer({ projectPath: process.cwd(), port: 0 })
     base = `http://127.0.0.1:${server.port}`
   })
 

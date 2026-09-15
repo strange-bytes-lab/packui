@@ -6,12 +6,17 @@ import type { DependencyReport } from '../src/shared/types.ts'
 
 const projectPath = fileURLToPath(new URL('./fixtures/pnpm-project', import.meta.url))
 
+/**
+ * Tests always bind port 0 so the OS assigns a free one. The production default is a
+ * fixed port, and several servers run per file (plus files in parallel), so inheriting
+ * that default makes them race for the same port range.
+ */
 describe('GET /api/deps', () => {
   let server: RunningServer
   let base: string
 
   beforeAll(async () => {
-    server = await startServer({ projectPath })
+    server = await startServer({ projectPath, port: 0 })
     base = `http://127.0.0.1:${server.port}`
   })
 
@@ -54,7 +59,7 @@ describe('removal gate', () => {
   let base: string
 
   beforeAll(async () => {
-    server = await startServer({ projectPath })
+    server = await startServer({ projectPath, port: 0 })
     base = `http://127.0.0.1:${server.port}`
   })
 
@@ -113,7 +118,7 @@ describe('GET /api/impact', () => {
   let base: string
 
   beforeAll(async () => {
-    server = await startServer({ projectPath })
+    server = await startServer({ projectPath, port: 0 })
     base = `http://127.0.0.1:${server.port}`
   })
 
