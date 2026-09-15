@@ -8,3 +8,7 @@ test/fixtures/
 # Prose, not code. Prettier renumbers table padding and rewrites emphasis markers,
 # which is churn on documents that are read far more often than they are edited.
 *.md
+
+# Written by release-please, in its own formatting. Prettier and the tool would
+# disagree on every release, and the tool has to win — it writes the file.
+.release-please-manifest.json
