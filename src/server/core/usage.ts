@@ -12,6 +12,7 @@ import { isDirectoryLike } from './fsutil.ts'
  */
 
 /** Source files worth scanning. Anything else cannot contain a JS import. */
+// prettier-ignore
 const SOURCE_EXTENSIONS = new Set([
   '.js', '.mjs', '.cjs', '.jsx',
   '.ts', '.mts', '.cts', '.tsx',
@@ -19,6 +20,7 @@ const SOURCE_EXTENSIONS = new Set([
 ])
 
 /** Directories that are generated, vendored, or irrelevant to what the project imports. */
+// prettier-ignore
 const SKIP_DIRECTORIES = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'coverage',
   '.next', '.nuxt', '.output', '.svelte-kit', '.turbo', '.cache', 'vendor',
@@ -92,10 +94,7 @@ async function* walk(current: string, budget: { left: number }): AsyncGenerator<
   }
 }
 
-export async function findUsages(
-  projectPath: string,
-  packageName: string,
-): Promise<UsageReport> {
+export async function findUsages(projectPath: string, packageName: string): Promise<UsageReport> {
   const matcher = buildMatcher(packageName)
   const usages: Usage[] = []
   const budget = { left: MAX_FILES }
@@ -135,18 +134,13 @@ export async function findUsages(
  * Removing something another package depends on leaves that package with an
  * unmet dependency, which npm and pnpm report but yarn and bun can be quieter about.
  */
-export async function findDependents(
-  projectPath: string,
-  packageName: string,
-): Promise<string[]> {
+export async function findDependents(projectPath: string, packageName: string): Promise<string[]> {
   const modulesRoot = join(projectPath, 'node_modules')
   const dependents: string[] = []
 
   async function inspect(dir: string, name: string): Promise<void> {
     try {
-      const manifest = JSON.parse(
-        await readFile(join(dir, 'package.json'), 'utf8'),
-      ) as {
+      const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as {
         dependencies?: Record<string, string>
         peerDependencies?: Record<string, string>
         optionalDependencies?: Record<string, string>

@@ -89,19 +89,43 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
         </p>
 
         <dl class="facts">
-          <div><dt>Installed</dt><dd class="mono">{{ payload.installed ?? '—' }}</dd></div>
-          <div><dt>Latest</dt><dd class="mono">{{ payload.latest ?? '—' }}</dd></div>
-          <div><dt>License</dt><dd>{{ payload.detail?.license ?? '—' }}</dd></div>
+          <div>
+            <dt>Installed</dt>
+            <dd class="mono">{{ payload.installed ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>Latest</dt>
+            <dd class="mono">{{ payload.latest ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>License</dt>
+            <dd>{{ payload.detail?.license ?? '—' }}</dd>
+          </div>
         </dl>
 
         <div class="links">
-          <a v-if="payload.repositoryUrl" :href="payload.repositoryUrl" target="_blank" rel="noopener noreferrer">
+          <a
+            v-if="payload.repositoryUrl"
+            :href="payload.repositoryUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             Repository
           </a>
-          <a v-if="payload.releasesUrl" :href="payload.releasesUrl" target="_blank" rel="noopener noreferrer">
+          <a
+            v-if="payload.releasesUrl"
+            :href="payload.releasesUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             Releases &amp; changelog
           </a>
-          <a v-if="payload.detail?.homepage" :href="payload.detail.homepage" target="_blank" rel="noopener noreferrer">
+          <a
+            v-if="payload.detail?.homepage"
+            :href="payload.detail.homepage"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             Homepage
           </a>
         </div>
@@ -117,7 +141,9 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
                 <span class="advisory-id mono">{{ advisory.id }}</span>
               </div>
               <p class="advisory-summary">{{ advisory.summary ?? 'No summary published.' }}</p>
-              <p class="advisory-fix">Fixed in: <span class="mono">{{ fixedVersionsFor(advisory) }}</span></p>
+              <p class="advisory-fix">
+                Fixed in: <span class="mono">{{ fixedVersionsFor(advisory) }}</span>
+              </p>
             </li>
           </ul>
         </section>
@@ -144,9 +170,11 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
         <section class="section">
           <h3>Readme</h3>
           <p v-if="!readmeHtml" class="muted">
-            {{ payload.installed === null
-              ? 'Install this package to read its readme.'
-              : 'This package does not ship a readme.' }}
+            {{
+              payload.installed === null
+                ? 'Install this package to read its readme.'
+                : 'This package does not ship a readme.'
+            }}
           </p>
           <!-- eslint-disable-next-line vue/no-v-html -- see composables/markdown.ts -->
           <div class="readme" v-html="readmeHtml" />
@@ -295,15 +323,31 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
 }
 
 .severity[data-severity='critical'],
-.severity[data-severity='high'] { color: var(--major); }
-.severity[data-severity='moderate'] { color: var(--minor); }
+.severity[data-severity='high'] {
+  color: var(--major);
+}
+.severity[data-severity='moderate'] {
+  color: var(--minor);
+}
 .severity[data-severity='low'],
-.severity[data-severity='unknown'] { color: var(--text-muted); }
+.severity[data-severity='unknown'] {
+  color: var(--text-muted);
+}
 
-.advisory-id { font-size: 11px; color: var(--text-muted); }
+.advisory-id {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
-.advisory-summary { margin: 0 0 var(--space-2); font-size: 13px; }
-.advisory-fix { margin: 0; font-size: 12px; color: var(--text-muted); }
+.advisory-summary {
+  margin: 0 0 var(--space-2);
+  font-size: 13px;
+}
+.advisory-fix {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
 .versions {
   max-block-size: 260px;
@@ -320,7 +364,9 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
   border-block-end: 1px solid var(--border);
 }
 
-.versions li:last-child { border-block-end: none; }
+.versions li:last-child {
+  border-block-end: none;
+}
 
 .pick {
   margin-inline-start: auto;
@@ -334,7 +380,9 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
   cursor: pointer;
 }
 
-.pick:hover { border-color: var(--accent); }
+.pick:hover {
+  border-color: var(--accent);
+}
 
 .tag {
   padding: 1px 6px;
@@ -347,9 +395,16 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
   border: 1px solid var(--border);
 }
 
-.mono { font-family: var(--font-mono); font-size: 12px; }
-.muted { color: var(--text-muted); }
-.error { color: var(--danger); }
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.muted {
+  color: var(--text-muted);
+}
+.error {
+  color: var(--danger);
+}
 
 .readme {
   font-size: 13px;
@@ -377,7 +432,9 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
   font-size: 12px;
 }
 
-.readme :deep(a) { color: var(--accent); }
+.readme :deep(a) {
+  color: var(--accent);
+}
 
 .readme :deep(blockquote) {
   margin-inline: 0;

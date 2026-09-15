@@ -68,7 +68,8 @@ export async function load(target: Selection = selection.value): Promise<void> {
   loading.value = true
   error.value = null
 
-  const path = target.kind === 'global' ? `/global/deps?id=${encodeURIComponent(target.id)}` : '/deps'
+  const path =
+    target.kind === 'global' ? `/global/deps?id=${encodeURIComponent(target.id)}` : '/deps'
 
   try {
     report.value = await apiFetch<DependencyReport>(path)

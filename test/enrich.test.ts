@@ -154,7 +154,10 @@ describe('registry client', () => {
   })
 
   it('returns null for a package the registry does not have', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('Not found', { status: 404 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('Not found', { status: 404 })),
+    )
 
     const { fetchPackageInfo } = await import('../src/server/core/registry.ts')
     await expect(fetchPackageInfo('private-thing')).resolves.toBeNull()

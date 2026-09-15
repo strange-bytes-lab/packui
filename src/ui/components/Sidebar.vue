@@ -34,7 +34,9 @@ function scopeHint(scope: GlobalScopeSummary): string {
             :aria-current="selection.kind === 'project'"
             @click="emit('select', { kind: 'project' })"
           >
-            <span class="entry-name">{{ selection.kind === 'project' ? project.name : 'Project' }}</span>
+            <span class="entry-name">{{
+              selection.kind === 'project' ? project.name : 'Project'
+            }}</span>
             <span v-if="project.packageManager && selection.kind === 'project'" class="pm">
               {{ project.packageManager }}
             </span>

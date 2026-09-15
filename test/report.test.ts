@@ -6,8 +6,7 @@ import { readManifest } from '../src/server/core/manifest.ts'
 import { buildReport, outdatedSeverity } from '../src/server/core/report.ts'
 import type { PackageManager } from '../src/shared/types.ts'
 
-const fixture = (name: string) =>
-  fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
+const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
 
 const PACKAGE_MANAGERS: PackageManager[] = ['npm', 'pnpm', 'yarn', 'bun']
 

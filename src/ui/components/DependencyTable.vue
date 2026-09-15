@@ -207,9 +207,15 @@ td {
   color: var(--text-faint);
 }
 
-[data-severity='major'] { color: var(--major); }
-[data-severity='minor'] { color: var(--minor); }
-[data-severity='patch'] { color: var(--patch); }
+[data-severity='major'] {
+  color: var(--major);
+}
+[data-severity='minor'] {
+  color: var(--minor);
+}
+[data-severity='patch'] {
+  color: var(--patch);
+}
 
 .tag {
   display: inline-block;

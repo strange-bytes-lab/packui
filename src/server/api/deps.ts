@@ -4,7 +4,10 @@ import { resolveAllowedProject, type ProjectAccess } from './access.ts'
 
 export function createDepsHandler(access: ProjectAccess) {
   return async ({ res, url }: RequestContext): Promise<void> => {
-    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+    const projectPath = resolveAllowedProject(
+      url.searchParams.get('path'),
+      access.allowedProjects(),
+    )
 
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')

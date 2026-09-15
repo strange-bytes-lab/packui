@@ -114,7 +114,10 @@ function submit(): void {
 <template>
   <dialog ref="dialog" class="remove" @close="emit('close')">
     <form class="body" @submit.prevent="submit">
-      <h2 class="heading">Remove <code>{{ packageName }}</code>?</h2>
+      <h2 class="heading">
+        Remove <code>{{ packageName }}</code
+        >?
+      </h2>
 
       <p v-if="loading" class="muted">Checking what uses it…</p>
       <p v-else-if="error" class="error">{{ error }}</p>
@@ -123,8 +126,8 @@ function submit(): void {
         <div class="verdict" data-risk="caution">
           <p class="verdict-title">This is a globally installed tool</p>
           <p class="verdict-body">
-            Anything on your machine that runs it will stop working. There is no
-            manifest or lockfile behind a global install, so this cannot be rolled back.
+            Anything on your machine that runs it will stop working. There is no manifest or
+            lockfile behind a global install, so this cannot be rolled back.
           </p>
         </div>
 
@@ -186,9 +189,7 @@ function submit(): void {
 
       <footer class="actions">
         <button type="button" class="ghost" @click="close">Cancel</button>
-        <button type="submit" class="danger" :disabled="!matches">
-          Remove it
-        </button>
+        <button type="submit" class="danger" :disabled="!matches">Remove it</button>
       </footer>
     </form>
   </dialog>
@@ -370,6 +371,10 @@ button {
   cursor: not-allowed;
 }
 
-.muted { color: var(--text-muted); }
-.error { color: var(--danger); }
+.muted {
+  color: var(--text-muted);
+}
+.error {
+  color: var(--danger);
+}
 </style>

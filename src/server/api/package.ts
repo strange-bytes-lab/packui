@@ -38,7 +38,8 @@ export function normalizeRepositoryUrl(raw: string | null): string | null {
 
   // Shorthand like "owner/repo" or "github:owner/repo".
   if (/^[\w.-]+\/[\w.-]+$/.test(candidate)) candidate = `https://github.com/${candidate}`
-  if (/^github:/.test(candidate)) candidate = `https://github.com/${candidate.slice('github:'.length)}`
+  if (/^github:/.test(candidate))
+    candidate = `https://github.com/${candidate.slice('github:'.length)}`
 
   try {
     const url = new URL(candidate)
@@ -60,7 +61,10 @@ function releasesUrlFor(repositoryUrl: string | null): string | null {
 
 export function createPackageHandler(access: ProjectAccess) {
   return async ({ req, res, url }: RequestContext): Promise<void> => {
-    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+    const projectPath = resolveAllowedProject(
+      url.searchParams.get('path'),
+      access.allowedProjects(),
+    )
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return

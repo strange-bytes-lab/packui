@@ -92,7 +92,9 @@ export async function queryVulnerabilities(
   if (queries.length === 0) return byName
 
   const entries = await Promise.all(
-    queries.map(async (query) => [query, await readCache<string[]>('osv', cacheKeyFor(query))] as const),
+    queries.map(
+      async (query) => [query, await readCache<string[]>('osv', cacheKeyFor(query))] as const,
+    ),
   )
 
   const misses: OsvQuery[] = []

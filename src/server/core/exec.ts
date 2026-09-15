@@ -72,9 +72,7 @@ export function runCommand(
 
     child.on('error', (error: NodeJS.ErrnoException) => {
       const message =
-        error.code === 'ENOENT'
-          ? `${built.command} is not installed or not on PATH`
-          : error.message
+        error.code === 'ENOENT' ? `${built.command} is not installed or not on PATH` : error.message
       finish({ code: null, error: message })
     })
 
@@ -98,10 +96,7 @@ export function isLocked(projectPath: string): boolean {
   return inFlight.has(projectPath)
 }
 
-export async function withProjectLock<T>(
-  projectPath: string,
-  work: () => Promise<T>,
-): Promise<T> {
+export async function withProjectLock<T>(projectPath: string, work: () => Promise<T>): Promise<T> {
   if (inFlight.has(projectPath)) {
     throw new Error('Another change is already running for this project')
   }

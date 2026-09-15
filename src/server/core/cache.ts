@@ -84,7 +84,9 @@ export async function pruneCache(): Promise<void> {
       }),
     )
 
-    const present = stats.filter((entry): entry is { path: string; modified: number } => entry !== null)
+    const present = stats.filter(
+      (entry): entry is { path: string; modified: number } => entry !== null,
+    )
     const cutoff = Date.now() - MAX_AGE_MS
 
     // Oldest first, so the count cap drops the least recently useful entries.

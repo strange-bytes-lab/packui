@@ -8,11 +8,17 @@ import type { DependencyReport } from '../../shared/types.ts'
  * already found on disk.
  */
 
-export function findScope(scopes: readonly GlobalScope[], id: string | null): GlobalScope | undefined {
+export function findScope(
+  scopes: readonly GlobalScope[],
+  id: string | null,
+): GlobalScope | undefined {
   return id === null ? scopes[0] : scopes.find((scope) => scope.id === id)
 }
 
-export function reportForScope(scope: GlobalScope, dependencies: DependencyReport['dependencies']): DependencyReport {
+export function reportForScope(
+  scope: GlobalScope,
+  dependencies: DependencyReport['dependencies'],
+): DependencyReport {
   return {
     project: {
       scope: 'global',

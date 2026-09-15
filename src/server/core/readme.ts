@@ -39,7 +39,9 @@ export async function readLocalReadme(
   // Prefer a Markdown README when a package ships more than one.
   const candidates = entries
     .filter((entry) => README_PATTERN.test(entry))
-    .sort((a, b) => Number(b.toLowerCase().endsWith('.md')) - Number(a.toLowerCase().endsWith('.md')))
+    .sort(
+      (a, b) => Number(b.toLowerCase().endsWith('.md')) - Number(a.toLowerCase().endsWith('.md')),
+    )
 
   const chosen = candidates[0]
   if (chosen === undefined) return null

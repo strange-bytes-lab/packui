@@ -163,9 +163,7 @@ describe('GET /api/impact', () => {
   })
 
   it('reports impact for a package with no usages', async () => {
-    const response = await fetch(
-      `${base}/api/impact?t=${sessionToken}&name=aligned-pkg`,
-    )
+    const response = await fetch(`${base}/api/impact?t=${sessionToken}&name=aligned-pkg`)
     expect(response.status).toBe(200)
 
     const impact = (await response.json()) as { risk: string; usageFileCount: number }

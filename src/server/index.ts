@@ -6,11 +6,7 @@ import { createEnrichHandler } from './api/enrich.ts'
 import { globalDepsHandler, globalScopesHandler } from './api/globals.ts'
 import { createImpactHandler } from './api/impact.ts'
 import { pruneCache } from './core/cache.ts'
-import {
-  createMutateHandler,
-  createRollbackHandler,
-  createSnapshotsHandler,
-} from './api/mutate.ts'
+import { createMutateHandler, createRollbackHandler, createSnapshotsHandler } from './api/mutate.ts'
 import { createPackageHandler } from './api/package.ts'
 import { Router, sendError, sendJson } from './router.ts'
 import { hasAllowedOrigin, hasValidToken, sessionToken } from './security.ts'

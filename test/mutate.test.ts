@@ -33,7 +33,11 @@ describe('command construction', () => {
     ['yarn', 'remove vue'],
     ['bun', 'remove vue'],
   ])('builds a removal for %s', (pm, expected) => {
-    const built = buildCommand(pm as PackageManager, { action: 'remove', name: 'vue', kind: 'prod' })
+    const built = buildCommand(pm as PackageManager, {
+      action: 'remove',
+      name: 'vue',
+      kind: 'prod',
+    })
     expect(built.display).toBe(`${pm} ${expected}`)
   })
 
@@ -167,7 +171,11 @@ describe('process execution', () => {
     const chunks: string[] = []
     await runCommand(
       projectPath,
-      { command: 'node', args: ['-e', 'console.log(process.argv[1])', '; echo pwned'], display: 'x' },
+      {
+        command: 'node',
+        args: ['-e', 'console.log(process.argv[1])', '; echo pwned'],
+        display: 'x',
+      },
       (event) => chunks.push(event.text),
     )
     // The metacharacters arrive as a literal argument; no second command runs.
@@ -197,9 +205,9 @@ describe('project lock', () => {
       return 'first'
     })
 
-    await expect(
-      withProjectLock('/some/project', async () => 'second'),
-    ).rejects.toThrow('Another change is already running')
+    await expect(withProjectLock('/some/project', async () => 'second')).rejects.toThrow(
+      'Another change is already running',
+    )
 
     release()
     await expect(first).resolves.toBe('first')
@@ -252,7 +260,9 @@ describe('snapshots', () => {
   async function freshBackupModule() {
     // The cache module resolves ~/.packui at import time, so it is re-imported
     // after HOME has been redirected.
-    const { resetModules } = await import('vitest').then((m) => ({ resetModules: m.vi.resetModules }))
+    const { resetModules } = await import('vitest').then((m) => ({
+      resetModules: m.vi.resetModules,
+    }))
     resetModules()
     return import('../src/server/core/backup.ts')
   }
@@ -264,9 +274,7 @@ describe('snapshots', () => {
     await writeFile(join(projectPath, 'package-lock.json'), '{"v":1}', 'utf8')
 
     const snapshot = await createSnapshot(projectPath, 'test')
-    expect(snapshot.files).toEqual(
-      expect.arrayContaining(['package.json', 'package-lock.json']),
-    )
+    expect(snapshot.files).toEqual(expect.arrayContaining(['package.json', 'package-lock.json']))
 
     await writeFile(join(projectPath, 'package.json'), '{"name":"after"}', 'utf8')
     await writeFile(join(projectPath, 'package-lock.json'), '{"v":2}', 'utf8')
@@ -415,7 +423,12 @@ describe('global commands', () => {
       buildGlobalCommand('npm', { action: 'remove', name: 'evil; rm -rf /', kind: 'prod' }),
     ).toThrow('Invalid package name')
     expect(() =>
-      buildGlobalCommand('volta', { action: 'upgrade', name: 'pnpm', version: '$(id)', kind: 'prod' }),
+      buildGlobalCommand('volta', {
+        action: 'upgrade',
+        name: 'pnpm',
+        version: '$(id)',
+        kind: 'prod',
+      }),
     ).toThrow('Invalid version')
     expect(() =>
       buildGlobalCommand('npm', { action: 'remove', name: '-rf', kind: 'prod' }),
