@@ -1,0 +1,44 @@
+{
+  "name": "packui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A local GUI for inspecting and upgrading your NPM dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/strange-bytes-lab/packui.git"
+  },
+  "bin": {
+    "packui": "bin/packui.mjs"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "pnpm build:ui && pnpm build:server",
+    "build:ui": "vite build",
+    "build:server": "node scripts/build-server.mjs",
+    "typecheck": "vue-tsc --build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:deps": "node scripts/verify-no-runtime-deps.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "@types/semver": "^7.8.0",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "esbuild": "^0.28.2",
+    "semver": "^7.8.5",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0",
+    "vue": "^3.5.42",
+    "vue-tsc": "^3.3.11"
+  }
+}

@@ -1,0 +1,4 @@
+# esbuild's postinstall selects its prebuilt platform binary. pnpm 11 requires
+# build scripts to be allowlisted explicitly; written by `pnpm approve-builds esbuild`.
+allowBuilds:
+  esbuild: true

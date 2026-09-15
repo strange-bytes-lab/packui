@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>packui</title>
+    <script>
+      // Applied before first paint so the correct theme never flashes.
+      try {
+        const stored = localStorage.getItem('packui:theme')
+        if (stored) document.documentElement.dataset.theme = stored
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
