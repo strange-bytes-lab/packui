@@ -4,11 +4,12 @@ import AlignmentBanner from '@/components/AlignmentBanner.vue'
 import DependencyTable from '@/components/DependencyTable.vue'
 import MutationConsole from '@/components/MutationConsole.vue'
 import PackageDrawer from '@/components/PackageDrawer.vue'
+import RemoveDialog from '@/components/RemoveDialog.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import { useFilters } from '@/composables/useFilters'
 import { requestMutation, type BatchPackage } from '@/composables/useMutation'
 import { loadProject, useProject } from '@/stores/useProject'
-import type { DependencyRow } from '@shared/types'
+import type { DependencyKind, DependencyRow } from '@shared/types'
 
 const { report, loading, enriching, error, enrichError, project, dependencies } = useProject()
 const { query, kind, problemsOnly, filtered } = useFilters(dependencies)
@@ -57,8 +58,17 @@ function upgradeRow(row: DependencyRow): void {
   requestMutation({ action: 'upgrade', name: row.name, version: row.latest, kind: row.kind })
 }
 
+/** Removals go through the impact dialog first; nothing is removed on one click. */
+const removalCandidate = ref<string | null>(null)
+
 function removeRow(row: DependencyRow): void {
-  requestMutation({ action: 'remove', name: row.name, kind: row.kind })
+  removalCandidate.value = row.name
+}
+
+function confirmRemoval(name: string, kind: DependencyKind): void {
+  removalCandidate.value = null
+  // The server rejects a removal whose `confirm` does not match the name exactly.
+  requestMutation({ action: 'remove', name, kind, confirm: name })
 }
 
 /** Picking a specific version in the drawer routes through the same confirmation. */
@@ -151,6 +161,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       :package-name="selectedPackage"
       @close="selectedPackage = null"
       @upgrade="upgradeToVersion"
+    />
+    <RemoveDialog
+      :package-name="removalCandidate"
+      @close="removalCandidate = null"
+      @confirm="confirmRemoval"
     />
     <MutationConsole @finished="loadProject()" />
   </div>

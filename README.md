@@ -26,8 +26,10 @@ build time, so the published package declares no dependencies at all.
 
 - One row per dependency: declared range, installed version, latest, how far behind,
   vulnerability state and lockfile alignment
-- Upgrade or remove a package, or upgrade everything outdated in one go — packui runs
-  your project's own package manager and shows you the command first
+- Upgrade a package, or upgrade everything outdated in one go — packui runs your
+  project's own package manager and shows you the command first
+- Removing a package first shows you every file that still imports it and every
+  installed package that depends on it, then asks you to type the name
 - Backs up `package.json` and the lockfile before every change, with one-click rollback
 - A drawer per package: readme, full version history, advisory detail with the versions
   that fix each one, and links to the repository and its releases
