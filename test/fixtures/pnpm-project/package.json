@@ -1,0 +1,14 @@
+{
+  "name": "pnpm-fixture",
+  "version": "1.0.0",
+  "packageManager": "pnpm@1.0.0",
+  "dependencies": {
+    "aligned-pkg": "^1.2.0",
+    "drifted-pkg": "^2.0.0",
+    "@scope/scoped-pkg": "~3.1.0"
+  },
+  "devDependencies": {
+    "absent-pkg": "^4.0.0",
+    "linked-pkg": "workspace:*"
+  }
+}

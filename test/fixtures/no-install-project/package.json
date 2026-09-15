@@ -1,0 +1,4 @@
+{
+  "name": "no-install-fixture",
+  "dependencies": { "aligned-pkg": "^1.2.0" }
+}

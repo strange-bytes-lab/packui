@@ -1,4 +1,6 @@
-node_modules/
+# Root only — test/fixtures/*/node_modules are committed on purpose, since the
+# alignment logic reads installed versions straight out of node_modules.
+/node_modules/
 dist/
 *.log
 .DS_Store
