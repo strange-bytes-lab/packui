@@ -69,9 +69,20 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return chunks
 }
 
+/** One cache entry per exact version, which is what the answer actually depends on. */
+function cacheKeyFor(query: OsvQuery): string {
+  return `${query.name}@${query.version}`
+}
+
 /**
  * Returns advisory ids per package. Detail is fetched lazily, when a drawer opens,
  * because the batch endpoint deliberately returns ids only.
+ *
+ * Cached per `name@version` rather than per request. Keying on the whole dependency
+ * set meant one version bump invalidated every result, and two projects sharing most
+ * of their dependencies shared no cache at all. A given version's advisories do not
+ * change from one project to the next, so the entries are reusable everywhere. Only
+ * the misses are sent to the API; the batching is what makes that cheap.
  */
 export async function queryVulnerabilities(
   queries: readonly OsvQuery[],
@@ -80,14 +91,27 @@ export async function queryVulnerabilities(
   const byName = new Map<string, string[]>()
   if (queries.length === 0) return byName
 
-  const cacheKey = queries.map((query) => `${query.name}@${query.version}`).join(',')
-  const cached = await readCache<Record<string, string[]>>('osv', cacheKey)
-  if (isFresh(cached, TTL_MS) && cached !== null) {
-    return new Map(Object.entries(cached.value))
+  const entries = await Promise.all(
+    queries.map(async (query) => [query, await readCache<string[]>('osv', cacheKeyFor(query))] as const),
+  )
+
+  const misses: OsvQuery[] = []
+  /** Expired entries, kept as the fallback if the API cannot be reached. */
+  const stale = new Map<string, string[]>()
+
+  for (const [query, cached] of entries) {
+    if (isFresh(cached, TTL_MS) && cached !== null) {
+      if (cached.value.length > 0) byName.set(query.name, cached.value)
+      continue
+    }
+    if (cached !== null && cached.value.length > 0) stale.set(query.name, cached.value)
+    misses.push(query)
   }
 
+  if (misses.length === 0) return byName
+
   try {
-    for (const batch of chunk(queries, BATCH_SIZE)) {
+    for (const batch of chunk(misses, BATCH_SIZE)) {
       const response = await fetch(`${OSV}/querybatch`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -104,22 +128,27 @@ export async function queryVulnerabilities(
 
       const body = (await response.json()) as QueryBatchResponse
       // Results are positional: index N answers query N.
-      body.results?.forEach((result, index) => {
-        const query = batch[index]
-        const ids = result.vulns?.map((vuln) => vuln.id) ?? []
-        if (query !== undefined && ids.length > 0) byName.set(query.name, ids)
-      })
+      const results = body.results ?? []
+
+      for (const [index, query] of batch.entries()) {
+        const ids = results[index]?.vulns?.map((vuln) => vuln.id) ?? []
+        // "No advisories" is an answer worth caching too, and it is the common one.
+        await writeCache('osv', cacheKeyFor(query), {
+          value: ids,
+          etag: null,
+          storedAt: Date.now(),
+        })
+        if (ids.length > 0) byName.set(query.name, ids)
+      }
     }
 
-    await writeCache('osv', cacheKey, {
-      value: Object.fromEntries(byName),
-      etag: null,
-      storedAt: Date.now(),
-    })
     return byName
   } catch {
     // Offline or OSV is down. Stale results beat inventing a clean bill of health.
-    return cached === null ? new Map() : new Map(Object.entries(cached.value))
+    for (const [name, ids] of stale) {
+      if (!byName.has(name)) byName.set(name, ids)
+    }
+    return byName
   }
 }
 

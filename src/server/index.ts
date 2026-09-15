@@ -5,6 +5,7 @@ import { createDepsHandler } from './api/deps.ts'
 import { createEnrichHandler } from './api/enrich.ts'
 import { globalDepsHandler, globalScopesHandler } from './api/globals.ts'
 import { createImpactHandler } from './api/impact.ts'
+import { pruneCache } from './core/cache.ts'
 import {
   createMutateHandler,
   createRollbackHandler,
@@ -71,6 +72,10 @@ function buildRouter(options: StartOptions): Router {
 }
 
 export async function startServer(options: StartOptions): Promise<RunningServer> {
+  // Nothing else deletes a cache entry, and a boot is the one moment where spending a
+  // little disk IO costs the user nothing. Not awaited: it must never delay the UI.
+  void pruneCache()
+
   const router = buildRouter(options)
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
