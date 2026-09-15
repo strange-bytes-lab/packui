@@ -16,8 +16,11 @@ export function reportForScope(scope: GlobalScope, dependencies: DependencyRepor
   return {
     project: {
       scope: 'global',
-      path: scope.roots[0] ?? '',
-      displayPath: scope.roots.length > 1 ? `${scope.roots.length} tool directories` : (scope.roots[0] ?? ''),
+      path: scope.roots[0]?.path ?? '',
+      displayPath:
+        scope.roots.length > 1
+          ? `${scope.roots.length} tool directories`
+          : (scope.roots[0]?.path ?? ''),
       name: scope.label,
       packageManager: scope.packageManager,
       lockfile: null,
@@ -41,7 +44,7 @@ export const globalScopesHandler = async ({ res }: RequestContext): Promise<void
       nodeVersion: scope.nodeVersion,
       active: scope.active,
       rootCount: scope.roots.length,
-      roots: scope.roots,
+      roots: scope.roots.map((root) => root.path),
     })),
   })
 }

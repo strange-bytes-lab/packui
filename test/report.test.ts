@@ -86,6 +86,29 @@ describe('outdated severity', () => {
     expect(outdatedSeverity('1.2.3', null)).toBe('unknown')
     expect(outdatedSeverity(null, '1.2.3')).toBe('unknown')
   })
+
+  it.each([
+    // Leaving a prerelease is unconstrained by semver — anything can change between a
+    // beta and its release — so these are major moves, not "already current".
+    ['3.0.0-beta.1', '3.0.0', 'major'],
+    ['2.0.0-rc.1', '3.0.0', 'major'],
+    // Within one prerelease line it is a small step.
+    ['1.0.0-alpha.1', '1.0.0-alpha.2', 'patch'],
+  ])('treats the prerelease %s against %s as %s', (installed, latest, expected) => {
+    expect(outdatedSeverity(installed, latest)).toBe(expected)
+  })
+
+  it('never reports a prerelease as up to date against its own release', () => {
+    // Coercing the installed version drops the tag, which made a beta look identical
+    // to the release it precedes.
+    expect(outdatedSeverity('3.0.0-beta.1', '3.0.0')).not.toBe('current')
+  })
+
+  it('still copes with a version semver cannot parse outright', () => {
+    // v-prefixed and four-part versions turn up in the wild; coercion is the fallback.
+    expect(outdatedSeverity('v1.2.3', '1.2.9')).toBe('patch')
+    expect(outdatedSeverity('1.2.3.4', '2.0.0')).toBe('major')
+  })
 })
 
 describe('report building', () => {

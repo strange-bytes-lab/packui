@@ -35,6 +35,19 @@ const run = promisify(execFile)
 /** Which tool installed the packages, which decides how they get upgraded. */
 export type Installer = 'npm' | 'pnpm' | 'yarn' | 'bun' | 'volta'
 
+/**
+ * A directory to scan for globally installed packages.
+ *
+ * `only` exists because volta's roots are not global roots at all: each is one tool's
+ * private `lib/node_modules`, which npm populates flat, so the tool sits in there
+ * beside its entire dependency tree. Listing the directory reports dozens of libraries
+ * the user never installed. When `only` is set, just that one entry is a global.
+ */
+export interface GlobalRoot {
+  path: string
+  only?: string
+}
+
 export interface GlobalScope {
   id: string
   label: string
@@ -42,7 +55,7 @@ export interface GlobalScope {
   /** The package manager used to mutate packages in this scope. */
   packageManager: PackageManager
   /** Directories to scan. volta contributes one root per installed tool. */
-  roots: string[]
+  roots: GlobalRoot[]
   nodeVersion: string | null
   /** True when this scope belongs to the currently active toolchain. */
   active: boolean
@@ -106,20 +119,22 @@ async function askForRoot(
  *   ~/.volta/tools/image/packages/<tool>/lib/node_modules/<tool>
  *   ~/.volta/tools/image/packages/@scope/<tool>/lib/node_modules/@scope/<tool>
  */
-async function voltaPackageRoots(): Promise<string[]> {
+async function voltaPackageRoots(): Promise<GlobalRoot[]> {
   const packagesDir = join(homedir(), '.volta', 'tools', 'image', 'packages')
-  const roots: string[] = []
+  const roots: GlobalRoot[] = []
 
   for (const entry of await listDirectories(packagesDir)) {
     if (entry.startsWith('@')) {
       for (const scoped of await listDirectories(join(packagesDir, entry))) {
-        const root = join(packagesDir, entry, scoped, 'lib', 'node_modules')
-        if (await isDirectory(root)) roots.push(root)
+        const path = join(packagesDir, entry, scoped, 'lib', 'node_modules')
+        // The directory owning the tree names the tool; everything else in there is
+        // one of its dependencies.
+        if (await isDirectory(path)) roots.push({ path, only: `${entry}/${scoped}` })
       }
       continue
     }
-    const root = join(packagesDir, entry, 'lib', 'node_modules')
-    if (await isDirectory(root)) roots.push(root)
+    const path = join(packagesDir, entry, 'lib', 'node_modules')
+    if (await isDirectory(path)) roots.push({ path, only: entry })
   }
 
   return roots
@@ -202,7 +217,7 @@ export async function detectGlobalScopes(): Promise<GlobalScope[]> {
       label: `${packageManager} global`,
       installer: packageManager,
       packageManager,
-      roots: [root],
+      roots: [{ path: root }],
       nodeVersion: packageManager === 'npm' ? activeNode : null,
       active: true,
     })
@@ -216,7 +231,7 @@ export async function detectGlobalScopes(): Promise<GlobalScope[]> {
       label: 'bun global',
       installer: 'bun',
       packageManager: 'bun',
-      roots: [bunRoot],
+      roots: [{ path: bunRoot }],
       nodeVersion: null,
       active: true,
     })
@@ -235,7 +250,7 @@ export async function detectGlobalScopes(): Promise<GlobalScope[]> {
         label: `${layout.manager} · node ${normalized}`,
         installer: 'npm',
         packageManager: 'npm',
-        roots: [root],
+        roots: [{ path: root }],
         nodeVersion: normalized,
         active: normalized === activeNode,
       })
@@ -250,7 +265,7 @@ export async function detectGlobalScopes(): Promise<GlobalScope[]> {
       label: `${manager} global`,
       installer: 'npm',
       packageManager: 'npm',
-      roots: [root],
+      roots: [{ path: root }],
       nodeVersion: null,
       active: false,
     })
@@ -271,9 +286,15 @@ async function dedupe(scopes: GlobalScope[]): Promise<GlobalScope[]> {
 
   for (const scope of scopes) {
     const resolved = await Promise.all(
-      scope.roots.map((root) => realpath(root).catch(() => root)),
+      scope.roots.map(async (root) => ({
+        ...root,
+        path: await realpath(root.path).catch(() => root.path),
+      })),
     )
-    const key = [...resolved].sort().join('|')
+    const key = resolved
+      .map((root) => root.path)
+      .sort()
+      .join('|')
     if (seen.has(key)) continue
     seen.add(key)
     result.push({ ...scope, roots: resolved })
@@ -315,24 +336,31 @@ async function readPackage(dir: string, name: string): Promise<DependencyRow | n
   }
 }
 
-async function readRoot(root: string): Promise<DependencyRow[]> {
+async function readRoot(root: GlobalRoot): Promise<DependencyRow[]> {
+  // A root that names its own package is a private tree, not a global root: read the
+  // one package and ignore the dependencies sitting next to it.
+  if (root.only !== undefined) {
+    const row = await readPackage(join(root.path, ...root.only.split('/')), root.only)
+    return row === null ? [] : [row]
+  }
+
   const rows: DependencyRow[] = []
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
+  const entries = await readdir(root.path, { withFileTypes: true }).catch(() => [])
 
   for (const entry of entries) {
     if (!isDirectoryLike(entry) || entry.name.startsWith('.') || entry.name === '.bin') continue
 
     if (entry.name.startsWith('@')) {
-      for (const inner of await listDirectories(join(root, entry.name))) {
+      for (const inner of await listDirectories(join(root.path, entry.name))) {
         const name = `${entry.name}/${inner}`
-        const row = await readPackage(join(root, entry.name, inner), name)
+        const row = await readPackage(join(root.path, entry.name, inner), name)
         if (row !== null) rows.push(row)
       }
       continue
     }
 
     if (BUILTIN.has(entry.name)) continue
-    const row = await readPackage(join(root, entry.name), entry.name)
+    const row = await readPackage(join(root.path, entry.name), entry.name)
     if (row !== null) rows.push(row)
   }
 
@@ -342,8 +370,8 @@ async function readRoot(root: string): Promise<DependencyRow[]> {
 export async function listGlobalPackages(scope: GlobalScope): Promise<DependencyRow[]> {
   const perRoot = await Promise.all(scope.roots.map(readRoot))
 
-  // A volta scope spans many roots, and a tool's own tree can contain its
-  // dependencies, so the same name can appear more than once. Keep the first.
+  // A volta scope spans many roots and the same tool can be reachable from more than
+  // one of them, so keep the first occurrence of each name.
   const byName = new Map<string, DependencyRow>()
   for (const rows of perRoot) {
     for (const row of rows) {

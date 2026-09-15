@@ -29,7 +29,9 @@ export function outdatedSeverity(
 ): OutdatedSeverity {
   if (installed === null || latest === null) return 'unknown'
 
-  const current = semver.coerce(installed, { loose: true })
+  // Coercion is a fallback for odd installed versions, not the default path: it drops
+  // the prerelease tag, which would make 3.0.0-beta.1 look identical to 3.0.0.
+  const current = semver.valid(installed, { loose: true }) ?? semver.coerce(installed, { loose: true })
   const target = semver.valid(latest, { loose: true })
   if (current === null || target === null) return 'unknown'
   if (semver.gte(current, target)) return 'current'
