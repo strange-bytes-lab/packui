@@ -90,6 +90,7 @@ export async function buildReport(projectPath: string): Promise<DependencyReport
 
   return {
     project: {
+      scope: 'project',
       path: projectPath,
       displayPath: toDisplayPath(projectPath),
       name: manifest.name === 'unnamed project' ? basename(projectPath) : manifest.name,

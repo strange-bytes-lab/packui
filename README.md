@@ -10,6 +10,8 @@ browser tabs. packui puts it in one view and lets you act on it in place.
 npx packui
 ```
 
+It serves on port 7225 and walks upward if that is taken.
+
 It reads the project in your current directory, opens a browser, and shows one row
 per dependency — declared range, installed version, latest version, how far behind
 you are, vulnerability state and lockfile alignment. READMEs and CVE detail open in
@@ -33,6 +35,9 @@ build time, so the published package declares no dependencies at all.
 - Backs up `package.json` and the lockfile before every change, with one-click rollback
 - A drawer per package: readme, full version history, advisory detail with the versions
   that fix each one, and links to the repository and its releases
+- **Globally installed CLIs too** — including the ones `npm root -g` cannot see,
+  because volta, nvm, fnm and asdf each keep globals somewhere different, and packages
+  stranded on a Node version you no longer use stay invisible to every other tool
 - Five themes, light and dark, following your system preference by default
 
 Vulnerability data comes from [OSV.dev](https://osv.dev); version and deprecation data

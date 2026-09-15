@@ -1,5 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative } from 'node:path'
+import { isDirectoryLike } from './fsutil.ts'
 
 /**
  * Finds where a package is actually used before packui offers to remove it.
@@ -170,14 +171,16 @@ export async function findDependents(
   }
 
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === '.bin') continue
+    // Symlinks count: pnpm links every top-level package, so filtering them out
+    // would report zero dependents for every pnpm project.
+    if (!isDirectoryLike(entry) || entry.name === '.bin') continue
 
     // Scoped packages nest one level deeper.
     if (entry.name.startsWith('@')) {
       try {
         const scoped = await readdir(join(modulesRoot, entry.name), { withFileTypes: true })
         for (const inner of scoped) {
-          if (!inner.isDirectory()) continue
+          if (!isDirectoryLike(inner)) continue
           await inspect(join(modulesRoot, entry.name, inner.name), `${entry.name}/${inner.name}`)
         }
       } catch {

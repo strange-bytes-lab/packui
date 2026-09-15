@@ -3,7 +3,7 @@ import type { DependencyRow } from '@shared/types'
 import StatusDot from './StatusDot.vue'
 import VulnerabilityBadge from './VulnerabilityBadge.vue'
 
-defineProps<{ rows: readonly DependencyRow[] }>()
+const props = defineProps<{ rows: readonly DependencyRow[]; global?: boolean }>()
 const emit = defineEmits<{
   select: [name: string]
   upgrade: [row: DependencyRow]
@@ -24,8 +24,8 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
       <tr>
         <th class="col-status"><span class="sr-only">Status</span></th>
         <th class="col-name">Package</th>
-        <th class="col-kind">Kind</th>
-        <th class="col-version">Declared</th>
+        <th v-if="!props.global" class="col-kind">Kind</th>
+        <th v-if="!props.global" class="col-version">Declared</th>
         <th class="col-version">Installed</th>
         <th class="col-version">Latest</th>
         <th class="col-flags">Flags</th>
@@ -46,10 +46,10 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
             {{ row.name }}
           </button>
         </td>
-        <td class="col-kind">
+        <td v-if="!props.global" class="col-kind">
           <span class="tag">{{ KIND_LABELS[row.kind] }}</span>
         </td>
-        <td class="col-version mono">{{ row.declared }}</td>
+        <td v-if="!props.global" class="col-version mono">{{ row.declared }}</td>
         <td class="col-version mono">
           <span v-if="row.installed">{{ row.installed }}</span>
           <span v-else class="absent">not installed</span>

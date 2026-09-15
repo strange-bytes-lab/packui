@@ -8,10 +8,21 @@ import RemoveDialog from '@/components/RemoveDialog.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import { useFilters } from '@/composables/useFilters'
 import { requestMutation, type BatchPackage } from '@/composables/useMutation'
-import { loadProject, useProject } from '@/stores/useProject'
+import { load, loadGlobalScopes, useProject, type Selection } from '@/stores/useProject'
 import type { DependencyKind, DependencyRow } from '@shared/types'
 
-const { report, loading, enriching, error, enrichError, project, dependencies } = useProject()
+const {
+  report,
+  globalScopes,
+  selection,
+  loading,
+  enriching,
+  error,
+  enrichError,
+  isGlobal,
+  project,
+  dependencies,
+} = useProject()
 const { query, kind, problemsOnly, filtered } = useFilters(dependencies)
 
 const selectedPackage = ref<string | null>(null)
@@ -78,8 +89,13 @@ function upgradeToVersion(name: string, version: string): void {
   selectedPackage.value = null
 }
 
+function select(target: Selection): void {
+  void load(target)
+}
+
 onMounted(() => {
-  void loadProject()
+  void load({ kind: 'project' })
+  void loadGlobalScopes()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -88,7 +104,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <div class="shell">
-    <Sidebar :project="project" />
+    <Sidebar
+      :project="project"
+      :scopes="globalScopes"
+      :selection="selection"
+      @select="select"
+    />
 
     <main class="content">
       <header class="toolbar">
@@ -110,11 +131,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <input v-model="problemsOnly" type="checkbox" />
             Needs attention
           </label>
-          <button type="button" :disabled="loading" @click="loadProject()">
+          <button type="button" :disabled="loading" @click="load()">
             {{ loading ? 'Refreshing…' : 'Refresh' }}
           </button>
+          <!--
+            Global scopes are upgraded one package at a time: volta, npm -g and the
+            others each own a different store, and batching across them would mean
+            guessing. The server rejects a global batch, so the button is not offered.
+          -->
           <button
-            v-if="outdated.length > 0"
+            v-if="outdated.length > 0 && !isGlobal"
             type="button"
             class="cta"
             @click="upgradeAll"
@@ -129,6 +155,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
       <template v-else-if="report">
         <AlignmentBanner
+          v-if="!isGlobal"
           :alignment="report.alignment"
           :package-manager="report.project.packageManager"
         />
@@ -136,20 +163,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           {{ enrichError }} — showing local data only.
         </p>
         <p class="summary">
-          {{ filtered.length }} of {{ dependencies.length }} dependencies
+          {{ filtered.length }} of {{ dependencies.length }}
+          {{ isGlobal ? 'global packages' : 'dependencies' }}
           <span v-if="enriching" class="summary-note">· checking the registry…</span>
         </p>
 
         <div v-if="dependencies.length === 0" class="empty-state">
-          <p class="empty-title">This project has no dependencies.</p>
+          <p class="empty-title">
+            {{ isGlobal ? 'Nothing installed here.' : 'This project has no dependencies.' }}
+          </p>
           <p class="empty-body">
-            Nothing to audit yet. Add a package and refresh.
+            {{
+              isGlobal
+                ? 'This toolchain has no global packages beyond the ones that ship with it.'
+                : 'Nothing to audit yet. Add a package and refresh.'
+            }}
           </p>
         </div>
 
         <DependencyTable
           v-else
           :rows="filtered"
+          :global="isGlobal"
           @select="selectedPackage = $event"
           @upgrade="upgradeRow"
           @remove="removeRow"
@@ -164,10 +199,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     />
     <RemoveDialog
       :package-name="removalCandidate"
+      :global="isGlobal"
       @close="removalCandidate = null"
       @confirm="confirmRemoval"
     />
-    <MutationConsole @finished="loadProject()" />
+    <MutationConsole @finished="load()" />
   </div>
 </template>
 

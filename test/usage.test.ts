@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { findDependents, findUsages } from '../src/server/core/usage.ts'
@@ -145,5 +145,41 @@ describe('dependent scanning', () => {
 
   it('returns nothing when node_modules is absent', async () => {
     expect(await findDependents(project, 'target')).toEqual([])
+  })
+
+  /**
+   * pnpm makes every top-level node_modules entry a symlink into its store, and
+   * `npm link` does the same. Dirent.isDirectory() is false for those, so filtering
+   * on it reported zero dependents for every pnpm project — a silent wrong answer
+   * in exactly the check meant to prevent a careless removal.
+   */
+  it('follows symlinked packages, as pnpm and npm link create', async () => {
+    const store = join(project, 'store', 'linked-dep')
+    await mkdir(store, { recursive: true })
+    await writeFile(
+      join(store, 'package.json'),
+      JSON.stringify({ name: 'linked-dep', dependencies: { target: '^1.0.0' } }),
+      'utf8',
+    )
+
+    await mkdir(join(project, 'node_modules'), { recursive: true })
+    await symlink(store, join(project, 'node_modules', 'linked-dep'), 'dir')
+
+    expect(await findDependents(project, 'target')).toEqual(['linked-dep'])
+  })
+
+  it('follows symlinked scoped packages too', async () => {
+    const store = join(project, 'store', 'scoped')
+    await mkdir(store, { recursive: true })
+    await writeFile(
+      join(store, 'package.json'),
+      JSON.stringify({ name: '@scope/linked', dependencies: { target: '^1.0.0' } }),
+      'utf8',
+    )
+
+    await mkdir(join(project, 'node_modules', '@scope'), { recursive: true })
+    await symlink(store, join(project, 'node_modules', '@scope', 'linked'), 'dir')
+
+    expect(await findDependents(project, 'target')).toEqual(['@scope/linked'])
   })
 })

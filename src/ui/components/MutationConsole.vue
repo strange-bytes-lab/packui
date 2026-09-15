@@ -9,7 +9,7 @@ import {
 
 const emit = defineEmits<{ finished: [] }>()
 
-const { phase, pending, command, output, failure, snapshotId } = useMutation()
+const { phase, pending, command, output, failure, snapshotId, noSnapshotReason } = useMutation()
 
 const dialog = ref<HTMLDialogElement | null>(null)
 const log = ref<HTMLPreElement | null>(null)
@@ -69,6 +69,10 @@ function close(): void {
       </p>
 
       <pre v-if="output" ref="log" class="log">{{ output }}</pre>
+
+      <p v-if="noSnapshotReason && phase !== 'confirming'" class="note note--warn">
+        {{ noSnapshotReason }}
+      </p>
 
       <p v-if="failure" class="failure">{{ failure }}</p>
       <p v-else-if="phase === 'succeeded'" class="success">Done.</p>
@@ -145,6 +149,10 @@ function close(): void {
   margin: 0 0 var(--space-4);
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.note--warn {
+  color: var(--minor);
 }
 
 .log {

@@ -34,6 +34,7 @@ test/              Vitest suites; fixture projects under test/fixtures/
 | Command | What it does |
 | --- | --- |
 | `pnpm dev` | Vite on :7332 proxying `/api` to the server on :7331, both watching |
+| `node bin/packui.mjs` | Serves on :7225 ("PACK" on a keypad), walking upward if taken |
 | `pnpm build` | Builds `dist/ui` and `dist/server` |
 | `pnpm test` | Vitest |
 | `pnpm typecheck` | `vue-tsc --build` across both TS projects |
@@ -84,6 +85,36 @@ lockfile, run the project's own package manager, stream its output, report the r
   depend on it; the dialog shows that, then requires the package name to be typed.
   The server independently rejects a removal whose `confirm` field does not match the
   name exactly, so the gate is not only in the UI.
+
+## Global packages
+
+The sidebar lists global scopes alongside the project. Finding them is the hard part
+and `npm root -g` alone is not enough:
+
+- It answers only for the **currently active** Node version. Under nvm, fnm, asdf or
+  volta, each installed Node version has its own global root, so packages installed
+  under a version you have since switched away from are on disk and invisible.
+- Under **volta** it is actively misleading: it points at volta's Node image, which
+  holds only npm and corepack. Tools installed with `volta install` live in a separate
+  store, one isolated `lib/node_modules` per tool. Trusting it on a volta machine
+  reports almost nothing while looking like a legitimately empty result.
+
+So `core/global.ts` asks each package manager *and* probes the known version-manager
+layouts (volta, nvm, fnm, asdf, n, Homebrew, system), then dedupes by real path.
+
+Global mutations go through whichever tool owns the package — volta tools are upgraded
+with `volta install`, never `npm install -g`, which would install a second copy where
+volta's shims never look. Globals have no manifest or lockfile, so there is nothing to
+snapshot and **rollback is not available**; the UI says so rather than offering a
+button that cannot work. Global mutations are one package at a time.
+
+## Symlinks in node_modules
+
+`Dirent.isDirectory()` is false for symlinks, and this bites in several places at once:
+pnpm links every top-level entry into its store, `npm link` and `volta install` of a
+local path link too. Use `isDirectoryLike` from `core/fsutil.ts` when walking
+node_modules, never a bare `isDirectory()` — getting this wrong made the removal gate
+report zero dependents for every pnpm project.
 
 ## Browser support policy
 

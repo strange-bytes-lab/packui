@@ -4,7 +4,7 @@ import { apiFetch } from '@/composables/useApi'
 import type { RemovalImpact } from '@/types/impact'
 import type { DependencyKind } from '@shared/types'
 
-const props = defineProps<{ packageName: string | null }>()
+const props = defineProps<{ packageName: string | null; global?: boolean }>()
 const emit = defineEmits<{
   close: []
   confirm: [name: string, kind: DependencyKind]
@@ -62,6 +62,14 @@ async function load(name: string): Promise<void> {
   error.value = null
   impact.value = null
   typed.value = ''
+
+  // A global CLI is not imported by the project, so scanning project source for it
+  // would answer a question nobody asked and could produce a misleading match.
+  if (props.global === true) {
+    loading.value = false
+    return
+  }
+
   try {
     impact.value = await apiFetch<RemovalImpact>(`/impact?name=${encodeURIComponent(name)}`)
   } catch (cause) {
@@ -104,6 +112,31 @@ function submit(): void {
 
       <p v-if="loading" class="muted">Checking what uses it…</p>
       <p v-else-if="error" class="error">{{ error }}</p>
+
+      <template v-else-if="global">
+        <div class="verdict" data-risk="caution">
+          <p class="verdict-title">This is a globally installed tool</p>
+          <p class="verdict-body">
+            Anything on your machine that runs it will stop working. There is no
+            manifest or lockfile behind a global install, so this cannot be rolled back.
+          </p>
+        </div>
+
+        <label class="confirm">
+          <span class="confirm-label">
+            Type <strong>{{ packageName }}</strong> to confirm
+          </span>
+          <input
+            ref="confirmInput"
+            v-model="typed"
+            type="text"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            :placeholder="packageName ?? ''"
+          />
+        </label>
+      </template>
 
       <template v-else-if="impact">
         <div class="verdict" :data-risk="impact.risk">

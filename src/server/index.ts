@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import type { ProjectAccess } from './api/access.ts'
 import { createDepsHandler } from './api/deps.ts'
 import { createEnrichHandler } from './api/enrich.ts'
+import { globalDepsHandler, globalScopesHandler } from './api/globals.ts'
 import { createImpactHandler } from './api/impact.ts'
 import {
   createMutateHandler,
@@ -14,10 +15,20 @@ import { Router, sendError, sendJson } from './router.ts'
 import { hasAllowedOrigin, hasValidToken, sessionToken } from './security.ts'
 import { serveStatic } from './static.ts'
 
+/**
+ * "PACK" on a phone keypad. Deliberately not in the range everyone's dev servers
+ * live in — 3000, 5173, 8080 and friends collide constantly, and a stable port means
+ * a bookmarked packui tab keeps working across restarts. If it is taken, the server
+ * walks upward rather than failing.
+ */
+export const DEFAULT_PORT = 7225
+
+const PORT_ATTEMPTS = 20
+
 export interface StartOptions {
   /** Absolute path of the project packui was launched against. */
   projectPath: string
-  /** Preferred port; 0 lets the OS pick a free one. */
+  /** Preferred port. Defaults to DEFAULT_PORT; 0 lets the OS pick any free one. */
   port?: number
 }
 
@@ -45,6 +56,11 @@ function buildRouter(options: StartOptions): Router {
   router.get('/api/package', createPackageHandler(access))
   router.get('/api/snapshots', createSnapshotsHandler(access))
   router.get('/api/impact', createImpactHandler(access))
+
+  // Global scopes are discovered from the package managers themselves rather than
+  // supplied by the client, so they need no path allowlist.
+  router.get('/api/global/scopes', globalScopesHandler)
+  router.get('/api/global/deps', globalDepsHandler)
 
   // Write endpoints. These additionally require a loopback Origin, enforced for all
   // mutating methods in the request handler below.
@@ -95,11 +111,39 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
     })()
   })
 
-  await new Promise<void>((resolvePromise, rejectPromise) => {
-    server.once('error', rejectPromise)
-    // Loopback only. Never 0.0.0.0 — this API can run package manager commands.
-    server.listen(options.port ?? 0, '127.0.0.1', resolvePromise)
-  })
+  const preferred = options.port ?? DEFAULT_PORT
+
+  const listenOn = (port: number): Promise<void> =>
+    new Promise<void>((resolvePromise, rejectPromise) => {
+      const onError = (error: NodeJS.ErrnoException): void => rejectPromise(error)
+      server.once('error', onError)
+      // Loopback only. Never 0.0.0.0 — this API can run package manager commands.
+      server.listen(port, '127.0.0.1', () => {
+        server.removeListener('error', onError)
+        resolvePromise()
+      })
+    })
+
+  // An explicit 0 means "any free port", so there is nothing to walk.
+  const candidates =
+    preferred === 0
+      ? [0]
+      : Array.from({ length: PORT_ATTEMPTS }, (_unused, offset) => preferred + offset)
+
+  let listenError: unknown = null
+  for (const candidate of candidates) {
+    try {
+      await listenOn(candidate)
+      listenError = null
+      break
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      // Only a busy port is worth retrying; anything else is a real failure.
+      if (code !== 'EADDRINUSE') throw error
+      listenError = error
+    }
+  }
+  if (listenError !== null) throw listenError
 
   const port = (server.address() as AddressInfo).port
 
