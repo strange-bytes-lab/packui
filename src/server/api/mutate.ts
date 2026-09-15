@@ -3,15 +3,19 @@ import { createSnapshot, listSnapshots, restoreSnapshot } from '../core/backup.t
 import {
   buildBatchCommands,
   buildCommand,
+  buildGlobalCommand,
   buildInstallCommand,
   type MutationAction,
   type MutationRequest,
 } from '../core/commands.ts'
+import { detectGlobalScopes } from '../core/global.ts'
+import { findScope } from './globals.ts'
 import { detectPackageManager } from '../core/detect.ts'
 import { runCommand, withProjectLock } from '../core/exec.ts'
 import { sendError, sendJson, type RequestContext } from '../router.ts'
 import { resolveAllowedProject, type ProjectAccess } from './access.ts'
-import type { DependencyKind } from '../../shared/types.ts'
+import { homedir } from 'node:os'
+import type { DependencyKind, PackageManager } from '../../shared/types.ts'
 
 /**
  * The write half of the API. Every mutation follows the same shape:
@@ -95,7 +99,23 @@ export function createMutateHandler(access: ProjectAccess) {
   return async (ctx: RequestContext): Promise<void> => {
     const { res, url } = ctx
 
-    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+    const isGlobal = url.searchParams.get('scope') === 'global'
+
+    const globalScope = isGlobal
+      ? findScope(await detectGlobalScopes(), url.searchParams.get('id'))
+      : undefined
+
+    if (isGlobal && globalScope === undefined) {
+      sendError(res, 404, 'No such global scope')
+      return
+    }
+
+    const projectPath = isGlobal
+      ? // Global commands do not act on a project directory; run them from the user's
+        // home so the package manager cannot pick up a stray local manifest.
+        homedir()
+      : resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return
@@ -132,21 +152,37 @@ export function createMutateHandler(access: ProjectAccess) {
       return
     }
 
-    const detection = await detectPackageManager(projectPath)
-    if (detection.packageManager === null) {
+    const detection = isGlobal
+      ? { packageManager: globalScope?.packageManager ?? null }
+      : await detectPackageManager(projectPath)
+
+    if (!isGlobal && detection.packageManager === null) {
       sendError(res, 422, 'Could not determine which package manager this project uses')
       return
     }
 
     let commands: ReturnType<typeof buildCommand>[]
     try {
-      if (batch !== null) {
+      if (globalScope !== undefined) {
+        if (typeof body.name !== 'string') {
+          sendError(res, 400, 'Global mutations act on one package at a time')
+          return
+        }
+        commands = [
+          buildGlobalCommand(globalScope.installer, {
+            action,
+            name: body.name,
+            version: typeof body.version === 'string' ? body.version : undefined,
+            kind: 'prod',
+          }),
+        ]
+      } else if (batch !== null) {
         if (action !== 'upgrade') {
           sendError(res, 400, 'Batch requests support upgrade only')
           return
         }
         commands = buildBatchCommands(
-          detection.packageManager,
+          detection.packageManager as PackageManager,
           batch.map((entry) => ({ action: 'upgrade' as const, ...entry })),
         )
       } else {
@@ -156,7 +192,7 @@ export function createMutateHandler(access: ProjectAccess) {
           version: typeof body.version === 'string' ? body.version : undefined,
           kind: KINDS.has(body.kind as DependencyKind) ? (body.kind as DependencyKind) : 'prod',
         }
-        commands = [buildCommand(detection.packageManager, request)]
+        commands = [buildCommand(detection.packageManager as PackageManager, request)]
       }
     } catch (error) {
       sendError(res, 400, error instanceof Error ? error.message : 'Invalid request')
@@ -171,10 +207,20 @@ export function createMutateHandler(access: ProjectAccess) {
         const send = openStream(res)
         send('command', { display: commands.map((c) => c.display).join('\n') })
 
-        // One snapshot covers the whole batch, so a partial failure part-way through
-        // rolls back to the state before any of it ran.
-        const snapshot = await createSnapshot(projectPath, commands[0]?.display ?? 'mutation')
-        send('snapshot', { id: snapshot.id, files: snapshot.files })
+        // Globals have no manifest or lockfile to snapshot, so there is nothing to
+        // roll back to. Saying so is better than offering a button that cannot work.
+        let snapshotId: string | null = null
+        if (isGlobal) {
+          send('no-snapshot', {
+            reason: 'Global packages have no manifest or lockfile, so this cannot be rolled back.',
+          })
+        } else {
+          // One snapshot covers the whole batch, so a partial failure part-way
+          // through rolls back to the state before any of it ran.
+          const snapshot = await createSnapshot(projectPath, commands[0]?.display ?? 'mutation')
+          snapshotId = snapshot.id
+          send('snapshot', { id: snapshot.id, files: snapshot.files })
+        }
 
         let failure: { code: number | null; error: string | null } | null = null
 
@@ -196,7 +242,7 @@ export function createMutateHandler(access: ProjectAccess) {
           ok: failure === null,
           code: failure?.code ?? 0,
           error: failure?.error ?? null,
-          snapshotId: snapshot.id,
+          snapshotId,
         })
         res.end()
       })

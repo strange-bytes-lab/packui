@@ -40,7 +40,15 @@ export interface DependencyRow {
   vulnerabilities: VulnerabilitySummary | null
 }
 
+/**
+ * A project has a manifest and a lockfile; a global scope has neither, only whatever
+ * is installed. The UI hides alignment and declared ranges for global scopes because
+ * there is nothing for them to mean.
+ */
+export type Scope = 'project' | 'global'
+
 export interface ProjectSummary {
+  scope: Scope
   /** Absolute path to the project root. */
   path: string
   /** The same path with the home directory collapsed to `~`, for display. */

@@ -25,6 +25,7 @@
     "src/server/**/*.ts",
     "src/shared/**/*.ts",
     "src/ui/composables/**/*.ts",
+    "src/ui/stores/**/*.ts",
     "src/ui/types/**/*.ts"
   ]
 }

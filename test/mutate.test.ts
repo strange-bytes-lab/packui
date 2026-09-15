@@ -360,3 +360,65 @@ describe('batch upgrades', () => {
     ).toThrow('Invalid package name')
   })
 })
+
+describe('global commands', () => {
+  it.each([
+    ['npm', 'npm install -g typescript@5.9.3'],
+    ['pnpm', 'pnpm add -g typescript@5.9.3'],
+    ['yarn', 'yarn add -g typescript@5.9.3'],
+    ['bun', 'bun add -g typescript@5.9.3'],
+  ])('builds a global upgrade for %s', async (installer, expected) => {
+    const { buildGlobalCommand } = await import('../src/server/core/commands.ts')
+    const built = buildGlobalCommand(installer as 'npm', {
+      action: 'upgrade',
+      name: 'typescript',
+      version: '5.9.3',
+      kind: 'prod',
+    })
+    expect(built.display).toBe(expected)
+  })
+
+  /**
+   * volta keeps its tools in its own store, not in any npm global root, so
+   * `npm install -g` would place a second copy where volta's shims never look.
+   */
+  it('uses volta itself for volta-managed tools', async () => {
+    const { buildGlobalCommand } = await import('../src/server/core/commands.ts')
+
+    expect(
+      buildGlobalCommand('volta', {
+        action: 'upgrade',
+        name: 'pnpm',
+        version: '12.4.2',
+        kind: 'prod',
+      }).display,
+    ).toBe('volta install pnpm@12.4.2')
+
+    expect(
+      buildGlobalCommand('volta', { action: 'remove', name: 'pnpm', kind: 'prod' }).display,
+    ).toBe('volta uninstall pnpm')
+  })
+
+  it('builds a global removal with the right verb per manager', async () => {
+    const { buildGlobalCommand } = await import('../src/server/core/commands.ts')
+    expect(
+      buildGlobalCommand('npm', { action: 'remove', name: 'typescript', kind: 'prod' }).display,
+    ).toBe('npm uninstall -g typescript')
+    expect(
+      buildGlobalCommand('pnpm', { action: 'remove', name: 'typescript', kind: 'prod' }).display,
+    ).toBe('pnpm remove -g typescript')
+  })
+
+  it('applies the same name and version validation as project commands', async () => {
+    const { buildGlobalCommand } = await import('../src/server/core/commands.ts')
+    expect(() =>
+      buildGlobalCommand('npm', { action: 'remove', name: 'evil; rm -rf /', kind: 'prod' }),
+    ).toThrow('Invalid package name')
+    expect(() =>
+      buildGlobalCommand('volta', { action: 'upgrade', name: 'pnpm', version: '$(id)', kind: 'prod' }),
+    ).toThrow('Invalid version')
+    expect(() =>
+      buildGlobalCommand('npm', { action: 'remove', name: '-rf', kind: 'prod' }),
+    ).toThrow('Invalid package name')
+  })
+})

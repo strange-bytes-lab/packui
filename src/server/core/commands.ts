@@ -25,6 +25,49 @@ export interface MutationRequest {
 }
 
 /**
+ * Global installs go through whichever tool owns them. volta is the odd one: its
+ * tools live in volta's own store, not in any npm global root, so `npm install -g`
+ * would install a second copy somewhere the shims never look.
+ */
+export type GlobalInstaller = 'npm' | 'pnpm' | 'yarn' | 'bun' | 'volta'
+
+export function buildGlobalCommand(
+  installer: GlobalInstaller,
+  request: MutationRequest,
+): BuiltCommand {
+  if (!isValidPackageName(request.name)) {
+    throw new Error(`Invalid package name: ${request.name}`)
+  }
+
+  let command: string
+  let args: string[]
+
+  if (installer === 'volta') {
+    command = 'volta'
+    if (request.action === 'remove') {
+      args = ['uninstall', request.name]
+    } else {
+      const version = request.version ?? 'latest'
+      if (!isValidVersion(version)) throw new Error(`Invalid version: ${version}`)
+      args = ['install', `${request.name}@${version}`]
+    }
+  } else {
+    command = installer
+    if (request.action === 'remove') {
+      const verb = installer === 'npm' ? 'uninstall' : 'remove'
+      args = [verb, '-g', request.name]
+    } else {
+      const version = request.version ?? 'latest'
+      if (!isValidVersion(version)) throw new Error(`Invalid version: ${version}`)
+      const verb = installer === 'npm' ? 'install' : 'add'
+      args = [verb, '-g', `${request.name}@${version}`]
+    }
+  }
+
+  return { command, args, display: `${command} ${args.join(' ')}` }
+}
+
+/**
  * npm's naming rules, deliberately stricter than the registry's legacy allowance.
  *
  * Note the first character class excludes `-`. A name like `-rf` is not obviously

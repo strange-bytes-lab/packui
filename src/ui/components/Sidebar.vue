@@ -1,10 +1,23 @@
 <script setup lang="ts">
 import type { ProjectSummary } from '@shared/types'
 import { useTheme } from '@/composables/useTheme'
+import type { GlobalScopeSummary, Selection } from '@/stores/useProject'
 
-defineProps<{ project: ProjectSummary | null }>()
+defineProps<{
+  project: ProjectSummary | null
+  scopes: readonly GlobalScopeSummary[]
+  selection: Selection
+}>()
+
+const emit = defineEmits<{ select: [target: Selection] }>()
 
 const { theme, themes } = useTheme()
+
+/** Globals are per toolchain, so the Node version is the useful disambiguator. */
+function scopeHint(scope: GlobalScopeSummary): string {
+  if (scope.rootCount > 1) return `${scope.rootCount} tools`
+  return scope.nodeVersion === null ? scope.installer : `node ${scope.nodeVersion}`
+}
 </script>
 
 <template>
@@ -12,17 +25,40 @@ const { theme, themes } = useTheme()
     <div class="brand">packui</div>
 
     <nav class="section">
-      <span class="section-label">Projects</span>
-      <ul v-if="project" class="project-list">
+      <span class="section-label">Project</span>
+      <ul v-if="project" class="list">
         <li>
-          <button type="button" class="project" aria-current="true">
-            <span class="project-name">{{ project.name }}</span>
-            <span v-if="project.packageManager" class="pm">{{ project.packageManager }}</span>
+          <button
+            type="button"
+            class="entry"
+            :aria-current="selection.kind === 'project'"
+            @click="emit('select', { kind: 'project' })"
+          >
+            <span class="entry-name">{{ selection.kind === 'project' ? project.name : 'Project' }}</span>
+            <span v-if="project.packageManager && selection.kind === 'project'" class="pm">
+              {{ project.packageManager }}
+            </span>
           </button>
-          <span class="project-path" :title="project.path">{{ project.displayPath }}</span>
         </li>
       </ul>
-      <p v-else class="muted">No project loaded.</p>
+    </nav>
+
+    <nav v-if="scopes.length > 0" class="section">
+      <span class="section-label">Global</span>
+      <ul class="list">
+        <li v-for="scope in scopes" :key="scope.id">
+          <button
+            type="button"
+            class="entry"
+            :aria-current="selection.kind === 'global' && selection.id === scope.id"
+            @click="emit('select', { kind: 'global', id: scope.id })"
+          >
+            <span class="entry-name">{{ scope.label }}</span>
+            <span v-if="scope.active" class="dot" title="Active toolchain" />
+          </button>
+          <span class="entry-hint">{{ scopeHint(scope) }}</span>
+        </li>
+      </ul>
     </nav>
 
     <label class="section theme-picker">
@@ -44,7 +80,7 @@ const { theme, themes } = useTheme()
   padding: var(--space-4);
   background: var(--bg-sunken);
   border-inline-end: 1px solid var(--border);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .brand {
@@ -62,19 +98,24 @@ const { theme, themes } = useTheme()
   color: var(--text-faint);
 }
 
-.project-list {
+.list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.project {
+.list li + li {
+  margin-block-start: var(--space-2);
+}
+
+.entry {
   display: flex;
-  align-items: center;
   gap: var(--space-2);
+  align-items: center;
   inline-size: 100%;
   padding: var(--space-2);
   font: inherit;
+  font-size: 13px;
   text-align: start;
   color: var(--text);
   background: var(--bg-raised);
@@ -83,11 +124,11 @@ const { theme, themes } = useTheme()
   cursor: pointer;
 }
 
-.project[aria-current='true'] {
+.entry[aria-current='true'] {
   border-color: var(--accent);
 }
 
-.project-name {
+.entry-name {
   flex: 1;
   font-weight: 500;
   overflow: hidden;
@@ -102,20 +143,20 @@ const { theme, themes } = useTheme()
   color: var(--text-muted);
 }
 
-.project-path {
+.dot {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.entry-hint {
   display: block;
-  margin-block-start: var(--space-1);
+  margin-block-start: 2px;
+  padding-inline-start: var(--space-2);
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.muted {
-  margin: 0;
-  color: var(--text-muted);
 }
 
 .theme-picker {

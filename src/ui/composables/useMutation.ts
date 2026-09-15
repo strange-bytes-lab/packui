@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { DependencyKind } from '@shared/types'
+import { useProject } from '@/stores/useProject'
 
 /**
  * Drives a mutation and its streamed output.
@@ -35,6 +36,8 @@ const command = ref<string | null>(null)
 const output = ref<string>('')
 const failure = ref<string | null>(null)
 const snapshotId = ref<string | null>(null)
+/** Set when the target has nothing to snapshot, so rollback cannot be offered. */
+const noSnapshotReason = ref<string | null>(null)
 
 const token = (): string => sessionStorage.getItem('packui:token') ?? ''
 
@@ -44,6 +47,7 @@ export function requestMutation(mutation: PendingMutation): void {
   output.value = ''
   failure.value = null
   snapshotId.value = null
+  noSnapshotReason.value = null
   phase.value = 'confirming'
 }
 
@@ -104,7 +108,11 @@ async function readEventStream(
 async function stream(path: string, body: unknown, onDone: (done: DoneEvent) => void) {
   phase.value = 'running'
 
-  const response = await fetch(`/api${path}`, {
+  // A mutation acts on whatever the table is showing — the project, or one of the
+  // global scopes. Sending the wrong one would install into the wrong place.
+  const { selectionQuery } = useProject()
+
+  const response = await fetch(`/api${path}${selectionQuery()}`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token()}`,
@@ -125,6 +133,7 @@ async function stream(path: string, body: unknown, onDone: (done: DoneEvent) => 
   await readEventStream(response, (event, data) => {
     if (event === 'command') command.value = (data as { display: string }).display
     else if (event === 'snapshot') snapshotId.value = (data as { id: string }).id
+    else if (event === 'no-snapshot') noSnapshotReason.value = (data as { reason: string }).reason
     else if (event === 'output') output.value += (data as { text: string }).text
     else if (event === 'restored') output.value += 'Restored package.json and lockfile.\n'
     else if (event === 'done') done = data as DoneEvent
@@ -176,5 +185,5 @@ export async function rollback(): Promise<void> {
 }
 
 export function useMutation() {
-  return { phase, pending, command, output, failure, snapshotId }
+  return { phase, pending, command, output, failure, snapshotId, noSnapshotReason }
 }
