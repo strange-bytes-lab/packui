@@ -1,44 +1,59 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { apiFetch } from './composables/useApi'
-import { useTheme } from './composables/useTheme'
+import { onMounted } from 'vue'
+import AlignmentBanner from '@/components/AlignmentBanner.vue'
+import DependencyTable from '@/components/DependencyTable.vue'
+import Sidebar from '@/components/Sidebar.vue'
+import { useFilters } from '@/composables/useFilters'
+import { loadProject, useProject } from '@/stores/useProject'
 
-const { theme, themes } = useTheme()
+const { report, loading, error, project, dependencies } = useProject()
+const { query, kind, problemsOnly, filtered } = useFilters(dependencies)
 
-const projectPath = ref<string | null>(null)
-const error = ref<string | null>(null)
-
-onMounted(async () => {
-  try {
-    const health = await apiFetch<{ projectPath: string }>('/health')
-    projectPath.value = health.projectPath
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'Could not reach the packui server'
-  }
-})
+onMounted(() => void loadProject())
 </script>
 
 <template>
   <div class="shell">
-    <aside class="sidebar">
-      <div class="brand">packui</div>
-      <nav class="projects">
-        <span class="section-label">Projects</span>
-      </nav>
-      <label class="theme-picker">
-        <span class="section-label">Theme</span>
-        <select v-model="theme">
-          <option v-for="option in themes" :key="option.id" :value="option.id">
-            {{ option.label }}
-          </option>
-        </select>
-      </label>
-    </aside>
+    <Sidebar :project="project" />
 
     <main class="content">
+      <header class="toolbar">
+        <input
+          v-model="query"
+          type="search"
+          class="search"
+          placeholder="Filter packages…"
+          aria-label="Filter packages by name"
+        />
+        <div class="toolbar-group">
+          <select v-model="kind" aria-label="Dependency kind">
+            <option value="all">All kinds</option>
+            <option value="prod">Dependencies</option>
+            <option value="dev">Dev only</option>
+          </select>
+          <label class="checkbox">
+            <input v-model="problemsOnly" type="checkbox" />
+            Needs attention
+          </label>
+          <button type="button" :disabled="loading" @click="loadProject()">
+            {{ loading ? 'Refreshing…' : 'Refresh' }}
+          </button>
+        </div>
+      </header>
+
       <p v-if="error" class="status status--error">{{ error }}</p>
-      <p v-else-if="projectPath" class="status">{{ projectPath }}</p>
-      <p v-else class="status">Connecting…</p>
+      <p v-else-if="loading && !report" class="status">Reading project…</p>
+
+      <template v-else-if="report">
+        <AlignmentBanner
+          :alignment="report.alignment"
+          :package-manager="report.project.packageManager"
+        />
+        <p class="summary">
+          {{ filtered.length }} of {{ dependencies.length }} dependencies
+        </p>
+        <DependencyTable :rows="filtered" />
+      </template>
     </main>
   </div>
 </template>
@@ -46,51 +61,79 @@ onMounted(async () => {
 <style scoped>
 .shell {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) 1fr;
-  height: 100%;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  block-size: 100%;
 }
 
-.sidebar {
+.content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-4);
-  background: var(--bg-sunken);
-  border-inline-end: 1px solid var(--border);
+  padding: var(--space-5);
+  overflow: auto;
 }
 
-.brand {
-  font-weight: 600;
-  letter-spacing: -0.01em;
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-block-end: var(--space-4);
 }
 
-.section-label {
-  display: block;
-  margin-block-end: var(--space-2);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
+.toolbar-group {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  margin-inline-start: auto;
 }
 
-.theme-picker {
-  margin-block-start: auto;
-}
-
-.theme-picker select {
-  width: 100%;
-  padding: var(--space-1) var(--space-2);
+.search {
+  flex: 1;
+  min-inline-size: 180px;
+  max-inline-size: 320px;
+  padding: var(--space-2) var(--space-3);
   font: inherit;
   color: var(--text);
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
-.content {
-  padding: var(--space-5);
-  overflow: auto;
+select,
+button {
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+button:disabled {
+  color: var(--text-faint);
+  cursor: progress;
+}
+
+.checkbox {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.checkbox input {
+  accent-color: var(--accent);
+}
+
+.summary {
+  margin: 0 0 var(--space-2);
+  font-size: 12px;
+  color: var(--text-faint);
 }
 
 .status {

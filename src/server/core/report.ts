@@ -1,3 +1,4 @@
+import { homedir } from 'node:os'
 import { basename } from 'node:path'
 import semver from 'semver'
 import type {
@@ -10,6 +11,12 @@ import { detectPackageManager } from './detect.ts'
 import { readInstalledVersions } from './installed.ts'
 import { alignmentForDependency, isLockfileStale, worstAlignment } from './lockfile.ts'
 import { readManifest } from './manifest.ts'
+
+/** Collapses the home directory to `~` so long paths stay readable in the sidebar. */
+function toDisplayPath(path: string): string {
+  const home = homedir()
+  return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path
+}
 
 /**
  * How far behind the installed version is. Null `latest` means enrichment has not
@@ -84,6 +91,7 @@ export async function buildReport(projectPath: string): Promise<DependencyReport
   return {
     project: {
       path: projectPath,
+      displayPath: toDisplayPath(projectPath),
       name: manifest.name === 'unnamed project' ? basename(projectPath) : manifest.name,
       packageManager: detection.packageManager,
       lockfile: detection.lockfile,

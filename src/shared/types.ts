@@ -43,6 +43,8 @@ export interface DependencyRow {
 export interface ProjectSummary {
   /** Absolute path to the project root. */
   path: string
+  /** The same path with the home directory collapsed to `~`, for display. */
+  displayPath: string
   name: string
   packageManager: PackageManager | null
   lockfile: string | null
