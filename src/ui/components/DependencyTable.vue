@@ -4,7 +4,11 @@ import StatusDot from './StatusDot.vue'
 import VulnerabilityBadge from './VulnerabilityBadge.vue'
 
 defineProps<{ rows: readonly DependencyRow[] }>()
-const emit = defineEmits<{ select: [name: string] }>()
+const emit = defineEmits<{
+  select: [name: string]
+  upgrade: [row: DependencyRow]
+  remove: [row: DependencyRow]
+}>()
 
 const KIND_LABELS: Record<DependencyRow['kind'], string> = {
   prod: 'dep',
@@ -25,6 +29,7 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
         <th class="col-version">Installed</th>
         <th class="col-version">Latest</th>
         <th class="col-flags">Flags</th>
+        <th class="col-actions"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody>
@@ -58,6 +63,25 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
           <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
             deprecated
           </span>
+        </td>
+        <td class="col-actions">
+          <button
+            v-if="row.latest && row.outdated !== 'current'"
+            type="button"
+            class="action"
+            :title="`Upgrade to ${row.latest}`"
+            @click="emit('upgrade', row)"
+          >
+            Upgrade
+          </button>
+          <button
+            type="button"
+            class="action action--danger"
+            :title="`Remove ${row.name}`"
+            @click="emit('remove', row)"
+          >
+            Remove
+          </button>
         </td>
       </tr>
     </tbody>
@@ -115,6 +139,40 @@ td {
 
 .col-version {
   inline-size: 130px;
+}
+
+.col-actions {
+  inline-size: 150px;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.action {
+  padding: 2px var(--space-2);
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  /* Secondary actions stay quiet until the row is hovered or focused. */
+  opacity: 0;
+}
+
+.row:hover .action,
+.action:focus-visible {
+  opacity: 1;
+}
+
+.action:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.action--danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .col-flags {
