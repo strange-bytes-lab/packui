@@ -38,7 +38,7 @@ describe('static file serving', () => {
     '/assets/../../package.json',
   ])('does not escape the UI root for %s', async (path) => {
     const { body } = await request(path)
-    expect(body).not.toContain('"name": "@strange-bytes/packui"')
+    expect(body).not.toContain('"name": "packui"')
     expect(body).not.toContain('root:')
   })
 

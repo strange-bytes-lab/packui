@@ -1,5 +1,5 @@
 {
-  "name": "@strange-bytes/packui",
+  "name": "packui",
   "version": "0.0.0",
   "description": "A local GUI for inspecting and upgrading your NPM dependencies.",
   "type": "module",
