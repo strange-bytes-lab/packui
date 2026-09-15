@@ -99,9 +99,12 @@ export async function fetchManyPackageInfos(
 }
 
 /**
- * Metadata for the drawer, from the full packument. The README is NOT here:
- * the registry returns an empty `readme` field these days, so it is read from
- * node_modules instead — see core/readme.ts.
+ * Metadata for the drawer, from the *per-version* document at `/<pkg>/latest`.
+ *
+ * Not the full packument: that runs to megabytes for a popular package because it
+ * carries every version ever published, and all four fields below are a few hundred
+ * bytes of it. The README is not here either — the registry returns an empty `readme`
+ * field these days, so it is read from node_modules instead. See core/readme.ts.
  */
 export interface PackageDetail {
   homepage: string | null
@@ -118,10 +121,19 @@ export async function fetchPackageDetail(
   if (isFresh(cached, TTL_MS) && cached !== null) return cached.value
 
   try {
-    const response = await fetch(registryUrl(name), { signal: signal ?? null })
+    const response = await fetch(`${registryUrl(name)}/latest`, {
+      headers: cached?.etag ? { 'if-none-match': cached.etag } : {},
+      signal: signal ?? null,
+    })
+
+    if (response.status === 304 && cached !== null) {
+      await writeCache('detail', name, { ...cached, storedAt: Date.now() })
+      return cached.value
+    }
+
     if (!response.ok) return cached?.value ?? null
 
-    const full = (await response.json()) as {
+    const version = (await response.json()) as {
       homepage?: unknown
       license?: unknown
       description?: unknown
@@ -129,20 +141,24 @@ export async function fetchPackageDetail(
     }
 
     const repositoryUrl =
-      typeof full.repository === 'string'
-        ? full.repository
-        : typeof full.repository?.url === 'string'
-          ? full.repository.url
+      typeof version.repository === 'string'
+        ? version.repository
+        : typeof version.repository?.url === 'string'
+          ? version.repository.url
           : null
 
     const detail: PackageDetail = {
-      homepage: typeof full.homepage === 'string' ? full.homepage : null,
+      homepage: typeof version.homepage === 'string' ? version.homepage : null,
       repository: repositoryUrl,
-      license: typeof full.license === 'string' ? full.license : null,
-      description: typeof full.description === 'string' ? full.description : null,
+      license: typeof version.license === 'string' ? version.license : null,
+      description: typeof version.description === 'string' ? version.description : null,
     }
 
-    await writeCache('detail', name, { value: detail, etag: null, storedAt: Date.now() })
+    await writeCache('detail', name, {
+      value: detail,
+      etag: response.headers.get('etag'),
+      storedAt: Date.now(),
+    })
     return detail
   } catch {
     return cached?.value ?? null

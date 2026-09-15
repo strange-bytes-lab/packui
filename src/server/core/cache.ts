@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -54,6 +54,48 @@ export async function writeCache<T>(
 
 export function isFresh(entry: CacheEntry<unknown> | null, ttlMs: number): boolean {
   return entry !== null && Date.now() - entry.storedAt < ttlMs
+}
+
+/** Well past any TTL: an entry this old belongs to a package nobody looks at any more. */
+const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
+
+/** A ceiling on file count, for the case where everything is recent but enormous. */
+const MAX_ENTRIES_PER_NAMESPACE = 5000
+
+/**
+ * Drops stale cache entries. Nothing else ever deletes one, so without this
+ * ~/.packui/cache only grows — a few bytes per package per version, forever.
+ *
+ * Called once at boot and deliberately not awaited: an unprunable cache is untidy,
+ * never a failure, and the server has better things to start doing.
+ */
+export async function pruneCache(): Promise<void> {
+  const namespaces = await readdir(cacheRoot).catch(() => [])
+
+  for (const namespace of namespaces) {
+    const directory = join(cacheRoot, namespace)
+    const files = await readdir(directory).catch(() => [])
+
+    const stats = await Promise.all(
+      files.map(async (file) => {
+        const path = join(directory, file)
+        const info = await stat(path).catch(() => null)
+        return info === null ? null : { path, modified: info.mtimeMs }
+      }),
+    )
+
+    const present = stats.filter((entry): entry is { path: string; modified: number } => entry !== null)
+    const cutoff = Date.now() - MAX_AGE_MS
+
+    // Oldest first, so the count cap drops the least recently useful entries.
+    present.sort((a, b) => a.modified - b.modified)
+
+    const excess = Math.max(0, present.length - MAX_ENTRIES_PER_NAMESPACE)
+    for (const [index, entry] of present.entries()) {
+      if (index >= excess && entry.modified >= cutoff) continue
+      await rm(entry.path, { force: true })
+    }
+  }
 }
 
 /**
