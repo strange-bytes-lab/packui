@@ -19,6 +19,9 @@ export const sessionToken =
     ? process.env.PACKUI_TOKEN
     : randomBytes(32).toString('base64url')
 
+/** Where `pnpm dev` serves the UI. See vite.config.ts. */
+const DEV_UI_PORT = 7332
+
 function safeEquals(a: string, b: string): boolean {
   const bufA = Buffer.from(a)
   const bufB = Buffer.from(b)
@@ -55,7 +58,12 @@ export function hasAllowedOrigin(req: IncomingMessage, port: number): boolean {
   const isLoopbackHost = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
   if (!isLoopbackHost) return false
 
-  // The UI dev server runs on its own port and proxies to us.
-  const allowedPorts = new Set([String(port), '7332'])
+  // The Vite dev server runs on its own port and proxies to us, so it has to be
+  // allowed — but only while it exists. In a released build 7332 is just a port any
+  // local process can bind, and trusting it there would hand mutation rights to
+  // whatever happens to be listening on it.
+  const allowedPorts = new Set([String(port)])
+  if (process.env.PACKUI_DEV === '1') allowedPorts.add(String(DEV_UI_PORT))
+
   return allowedPorts.has(parsed.port)
 }

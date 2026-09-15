@@ -52,8 +52,16 @@ interface BatchEntry {
   kind: DependencyKind
 }
 
+/**
+ * Every entry becomes an argv element, so an unbounded array is an unbounded command
+ * line. A real batch upgrade is tens of packages; this is only here to stop one
+ * request from building a command a package manager cannot execute.
+ */
+const MAX_BATCH = 100
+
 function readBatch(value: unknown): BatchEntry[] | null {
   if (!Array.isArray(value) || value.length === 0) return null
+  if (value.length > MAX_BATCH) throw new Error(`A batch is limited to ${MAX_BATCH} packages`)
   const entries: BatchEntry[] = []
   for (const item of value) {
     const entry = item as Record<string, unknown>
@@ -135,7 +143,14 @@ export function createMutateHandler(access: ProjectAccess) {
       return
     }
 
-    const batch = readBatch(body.packages)
+    let batch: BatchEntry[] | null
+    try {
+      batch = readBatch(body.packages)
+    } catch (error) {
+      sendError(res, 400, error instanceof Error ? error.message : 'Invalid batch')
+      return
+    }
+
     if (batch === null && typeof body.name !== 'string') {
       sendError(res, 400, 'name or packages is required')
       return

@@ -1,3 +1,4 @@
+import { isValidPackageName } from '../core/commands.ts'
 import { readInstalledVersion } from '../core/installed.ts'
 import { readManifest } from '../core/manifest.ts'
 import { findDependents, findUsages, type Usage } from '../core/usage.ts'
@@ -46,7 +47,7 @@ export function createImpactHandler(access: ProjectAccess) {
     }
 
     const name = url.searchParams.get('name')
-    if (name === null || !/^(@[\w.-]+\/)?[\w.-]+$/.test(name)) {
+    if (name === null || !isValidPackageName(name)) {
       sendError(res, 400, 'Invalid package name')
       return
     }

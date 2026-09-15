@@ -113,6 +113,42 @@ describe('removal gate', () => {
   })
 })
 
+describe('batch limits', () => {
+  let server: RunningServer
+  let base: string
+
+  beforeAll(async () => {
+    server = await startServer({ projectPath, port: 0 })
+    base = `http://127.0.0.1:${server.port}`
+  })
+
+  afterAll(async () => {
+    await server.close()
+  })
+
+  it('refuses a batch larger than the cap', async () => {
+    const packages = Array.from({ length: 101 }, (_unused, index) => ({
+      name: `pkg-${index}`,
+      version: '1.0.0',
+      kind: 'prod',
+    }))
+
+    const response = await fetch(`${base}/api/mutate?t=${sessionToken}`, {
+      method: 'POST',
+      headers: {
+        origin: `http://127.0.0.1:${server.port}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'upgrade', packages }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('limited to 100'),
+    })
+  })
+})
+
 describe('GET /api/impact', () => {
   let server: RunningServer
   let base: string
@@ -140,6 +176,27 @@ describe('GET /api/impact', () => {
   it('validates the package name', async () => {
     const response = await fetch(`${base}/api/impact?t=${sessionToken}&name=../../etc`)
     expect(response.status).toBe(400)
+  })
+
+  // These are names the old per-route regex accepted. They are joined into
+  // node_modules/<name> and into registry URLs, where a dot segment traverses.
+  it.each(['..', '.', '@../..', '@./x', '-rf'])(
+    'refuses %j as a package name on both name-taking routes',
+    async (name) => {
+      for (const route of ['impact', 'package']) {
+        const response = await fetch(
+          `${base}/api/${route}?t=${sessionToken}&name=${encodeURIComponent(name)}`,
+        )
+        expect(response.status).toBe(400)
+      }
+    },
+  )
+
+  it('still accepts a legacy uppercase package name', async () => {
+    // JSONStream and friends predate npm's lowercase rule and are still installable,
+    // so the validator must not treat them as suspicious.
+    const response = await fetch(`${base}/api/impact?t=${sessionToken}&name=JSONStream`)
+    expect(response.status).toBe(200)
   })
 
   it('requires a token', async () => {

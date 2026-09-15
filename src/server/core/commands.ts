@@ -68,17 +68,37 @@ export function buildGlobalCommand(
 }
 
 /**
- * npm's naming rules, deliberately stricter than the registry's legacy allowance.
+ * The one package-name validator. Every path that puts a name into a subprocess
+ * argument, a filesystem path or a registry URL goes through this.
  *
- * Note the first character class excludes `-`. A name like `-rf` is not obviously
- * dangerous as a name, but it is passed to a CLI as a positional argument, where a
- * leading hyphen makes it parse as a flag instead. Rejecting it here is simpler and
- * more portable than relying on each package manager's `--` handling.
+ * Two rules do the security work:
+ *
+ * - The first character excludes `-`. A name like `-rf` is not dangerous as a name,
+ *   but it reaches a CLI as a positional argument, where a leading hyphen makes it
+ *   parse as a flag. Rejecting it is simpler and more portable than relying on each
+ *   package manager's `--` handling.
+ * - It also excludes `.`, so `.` and `..` can never be names. Those are joined into
+ *   `node_modules/<name>` and into registry URLs, where they would traverse.
+ *
+ * Uppercase is allowed even though npm has forbidden it in new names for years:
+ * `JSONStream` and friends are still published, still installable, and still in real
+ * dependency trees. Rejecting them would break the drawer and the upgrade button for
+ * packages that are perfectly legitimate.
  */
-const PACKAGE_NAME = /^(@[a-z0-9~][a-z0-9-._~]*\/)?[a-z0-9~][a-z0-9-._~]*$/
+const NAME_SEGMENT = /^[A-Za-z0-9~][A-Za-z0-9-._~]*$/
 
 export function isValidPackageName(name: string): boolean {
-  return name.length > 0 && name.length <= 214 && PACKAGE_NAME.test(name)
+  if (name.length === 0 || name.length > 214) return false
+
+  if (name.startsWith('@')) {
+    const slash = name.indexOf('/')
+    if (slash === -1) return false
+    return (
+      NAME_SEGMENT.test(name.slice(1, slash)) && NAME_SEGMENT.test(name.slice(slash + 1))
+    )
+  }
+
+  return NAME_SEGMENT.test(name)
 }
 
 /** An exact version, or one of the dist-tags it is reasonable to install by name. */

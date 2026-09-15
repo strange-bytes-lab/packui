@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { IncomingMessage } from 'node:http'
 import { startServer, type RunningServer } from '../src/server/index.ts'
-import { sessionToken } from '../src/server/security.ts'
+import { hasAllowedOrigin, sessionToken } from '../src/server/security.ts'
 
 /**
  * The API can run package manager commands against real projects, so these are
@@ -62,6 +63,40 @@ describe('server security boundary', () => {
     })
     // 404 because /api/health has no POST route — the point is it got past the origin gate.
     expect(response.status).toBe(404)
+  })
+
+  it('rejects the dev server origin when not running in dev', () => {
+    // 7332 is the Vite dev server, which only exists during `pnpm dev`. In a released
+    // build it is a port any local process can bind, so it must not be trusted.
+    expect(process.env.PACKUI_DEV).not.toBe('1')
+    expect(
+      hasAllowedOrigin(
+        { headers: { origin: 'http://localhost:7332' } } as IncomingMessage,
+        server.port,
+      ),
+    ).toBe(false)
+  })
+
+  it('allows the dev server origin only while PACKUI_DEV is set', () => {
+    const previous = process.env.PACKUI_DEV
+    process.env.PACKUI_DEV = '1'
+    try {
+      expect(
+        hasAllowedOrigin(
+          { headers: { origin: 'http://localhost:7332' } } as IncomingMessage,
+          server.port,
+        ),
+      ).toBe(true)
+    } finally {
+      if (previous === undefined) delete process.env.PACKUI_DEV
+      else process.env.PACKUI_DEV = previous
+    }
+  })
+
+  it('sends the security headers on every response', async () => {
+    const response = await fetch(`${base}/api/health?t=${sessionToken}`)
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer')
   })
 
   it('binds to loopback only', () => {
