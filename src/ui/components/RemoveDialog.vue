@@ -42,6 +42,12 @@ const headline = computed(() => {
   return 'Nothing in this project imports it'
 })
 
+/*
+ * The switch below is exhaustive over RemovalImpact['risk'] and TypeScript enforces
+ * that. A default case would be unreachable code, and would stop the compiler from
+ * catching the day a new risk level is added — which is the check that matters here.
+ */
+// oxlint-disable-next-line vue/return-in-computed-property
 const explanation = computed(() => {
   const current = impact.value
   if (current === null) return ''
