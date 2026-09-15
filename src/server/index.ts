@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { createDepsHandler } from './api/deps.ts'
 import { Router, sendError, sendJson } from './router.ts'
 import { hasAllowedOrigin, hasValidToken, sessionToken } from './security.ts'
 import { serveStatic } from './static.ts'
@@ -25,6 +26,10 @@ function buildRouter(options: StartOptions): Router {
   router.get('/api/health', ({ res }) => {
     sendJson(res, 200, { ok: true, projectPath: options.projectPath })
   })
+
+  // Only the project packui was launched against is readable for now. The sidebar's
+  // multi-project list will extend this allowlist rather than remove it.
+  router.get('/api/deps', createDepsHandler({ allowedProjects: () => [options.projectPath] }))
 
   return router
 }
