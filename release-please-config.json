@@ -3,7 +3,7 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "packui",
+      "package-name": "@strange-bytes/packui",
       "changelog-path": "CHANGELOG.md"
     }
   },
