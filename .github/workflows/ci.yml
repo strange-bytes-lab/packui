@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to a PR makes the in-flight run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: ${{ matrix.task.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every failing stage in one run rather than stopping at the first.
+      fail-fast: false
+      matrix:
+        task:
+          - name: typecheck
+            run: pnpm typecheck
+          - name: test
+            run: pnpm test
+          - name: build
+            run: pnpm build
+          - name: no runtime dependencies
+            run: pnpm verify:deps
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the engines field; the server bundle targets node22.
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: ${{ matrix.task.name }}
+        run: ${{ matrix.task.run }}
+
+  # The one thing that cannot be checked by running a script: the package must still
+  # start and serve the UI once built, from the published file list alone.
+  smoke:
+    name: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Boot the server and check it serves
+        run: |
+          node bin/packui.mjs --no-open --port 7225 . > /tmp/packui.log 2>&1 &
+          for _ in $(seq 1 30); do
+            grep -q 'packui  http' /tmp/packui.log && break
+            sleep 1
+          done
+          cat /tmp/packui.log
+
+          url=$(grep -o 'http://127.0.0.1:7225/?t=[A-Za-z0-9_-]*' /tmp/packui.log)
+          token=${url##*t=}
+          if [ -z "$token" ]; then echo "server did not start"; exit 1; fi
+
+          # The UI shell must be served.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:7225/")
+          [ "$code" = "200" ] || { echo "UI returned $code"; exit 1; }
+
+          # The API must answer with a valid token.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:7225/api/deps?t=$token")
+          [ "$code" = "200" ] || { echo "authorised API call returned $code"; exit 1; }
+
+          # ...and must refuse without one. A regression here is a security regression.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:7225/api/deps")
+          [ "$code" = "401" ] || { echo "unauthenticated API call returned $code, expected 401"; exit 1; }
+
+          # Mutations must refuse a foreign origin even with a valid token.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Origin: http://evil.example' -H 'content-type: application/json' \
+            -d '{"action":"remove","name":"x","confirm":"x"}' \
+            "http://127.0.0.1:7225/api/mutate?t=$token")
+          [ "$code" = "403" ] || { echo "cross-origin mutation returned $code, expected 403"; exit 1; }
+
+          echo "smoke checks passed"

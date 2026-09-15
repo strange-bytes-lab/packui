@@ -40,6 +40,12 @@ test/              Vitest suites; fixture projects under test/fixtures/
 | `pnpm typecheck` | `vue-tsc --build` across both TS projects |
 | `pnpm verify:deps` | Fails if any runtime dependency has crept in |
 
+CI (`.github/workflows/ci.yml`) runs typecheck, test, build and verify:deps as separate
+matrix jobs so one run reports every failing stage, plus a smoke job that boots the
+built server and asserts the UI serves, the API accepts a valid token, rejects a
+missing one with 401, and rejects a cross-origin mutation with 403. Those last two are
+security regressions if they ever go green wrongly — do not relax them.
+
 ## Security model
 
 The API executes package manager commands against real projects, so it is treated as a
