@@ -1,6 +1,6 @@
 {
   "name": "@strange-bytes/packui",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A local GUI for inspecting and upgrading your NPM dependencies.",
   "type": "module",
   "license": "MIT",
