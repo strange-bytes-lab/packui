@@ -23,6 +23,8 @@ export interface PendingMutation {
   kind?: DependencyKind
   /** Set instead of name/version when upgrading several packages at once. */
   packages?: BatchPackage[]
+  /** Required by the server for removals; must equal `name` exactly. */
+  confirm?: string
 }
 
 export type MutationPhase = 'idle' | 'confirming' | 'running' | 'succeeded' | 'failed'

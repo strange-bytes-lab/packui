@@ -77,6 +77,13 @@ lockfile, run the project's own package manager, stream its output, report the r
 - **Choose the save flag from the dependency's current kind**, or an upgrade will move
   a devDependency into `dependencies`. Batch upgrades group by kind for this reason.
 - **Show the command before running it.**
+- **Removal is gated, never one-click.** It is the only action that breaks a project
+  at runtime rather than at install time — the uninstall succeeds, the lockfile
+  updates cleanly, and the failure appears later in whatever imported the package.
+  `GET /api/impact` scans source for real imports and finds installed packages that
+  depend on it; the dialog shows that, then requires the package name to be typed.
+  The server independently rejects a removal whose `confirm` field does not match the
+  name exactly, so the gate is not only in the UI.
 
 ## Browser support policy
 

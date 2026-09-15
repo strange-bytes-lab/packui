@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import type { ProjectAccess } from './api/access.ts'
 import { createDepsHandler } from './api/deps.ts'
 import { createEnrichHandler } from './api/enrich.ts'
+import { createImpactHandler } from './api/impact.ts'
 import {
   createMutateHandler,
   createRollbackHandler,
@@ -43,6 +44,7 @@ function buildRouter(options: StartOptions): Router {
   router.get('/api/enrich', createEnrichHandler(access))
   router.get('/api/package', createPackageHandler(access))
   router.get('/api/snapshots', createSnapshotsHandler(access))
+  router.get('/api/impact', createImpactHandler(access))
 
   // Write endpoints. These additionally require a loopback Origin, enforced for all
   // mutating methods in the request handler below.

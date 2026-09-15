@@ -34,6 +34,12 @@ interface MutateBody {
   snapshotId?: unknown
   /** Present instead of name/version when upgrading several packages at once. */
   packages?: unknown
+  /**
+   * Required for removals: must equal the package name exactly. The gate lives on
+   * the server, not only in the confirmation dialog, so a stray or scripted call
+   * cannot delete a dependency by accident.
+   */
+  confirm?: unknown
 }
 
 interface BatchEntry {
@@ -112,6 +118,17 @@ export function createMutateHandler(access: ProjectAccess) {
     const batch = readBatch(body.packages)
     if (batch === null && typeof body.name !== 'string') {
       sendError(res, 400, 'name or packages is required')
+      return
+    }
+
+    // Removal is the only action here that breaks a project at runtime rather than
+    // at install time, and the only one an upgrade cannot undo by moving forward.
+    if (action === 'remove' && body.confirm !== body.name) {
+      sendError(
+        res,
+        400,
+        'Removal requires a "confirm" field exactly matching the package name',
+      )
       return
     }
 
