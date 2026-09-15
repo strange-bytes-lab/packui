@@ -38,13 +38,24 @@ test/              Vitest suites; fixture projects under test/fixtures/
 | `pnpm build` | Builds `dist/ui` and `dist/server` |
 | `pnpm test` | Vitest |
 | `pnpm typecheck` | `vue-tsc --build` across both TS projects |
+| `pnpm lint` | oxlint. Narrow rule set — correctness and suspicious only |
+| `pnpm format` / `format:check` | Prettier. Markdown is excluded on purpose |
 | `pnpm verify:deps` | Fails if any runtime dependency has crept in |
 
-CI (`.github/workflows/ci.yml`) runs typecheck, test, build and verify:deps as separate
-matrix jobs so one run reports every failing stage, plus a smoke job that boots the
-built server and asserts the UI serves, the API accepts a valid token, rejects a
-missing one with 401, and rejects a cross-origin mutation with 403. Those last two are
-security regressions if they ever go green wrongly — do not relax them.
+CI (`.github/workflows/ci.yml`) has two jobs. `check` runs lint, format, typecheck and
+verify:deps once each on ubuntu — none of those answers can depend on the platform.
+`test` runs the suite and the build across Node 22 and 24 on ubuntu and macOS, which is
+what `engines: >=22` claims. Both use `fail-fast: false` so one run reports every
+failing stage.
+
+A third job, `smoke`, boots the built server and asserts the UI serves, the shell
+carries a CSP with no `unsafe-inline`, the API accepts a valid token, rejects a missing
+one with 401, and rejects a cross-origin mutation — including one from the dev server's
+port — with 403. Those are security regressions if they ever go green wrongly. Do not
+relax them.
+
+Windows is deliberately untested: `bin/packui.mjs` shells out to `start` and
+`core/global.ts` assumes POSIX layouts. A green tick there would be a claim, not a fact.
 
 ## Security model
 
@@ -59,8 +70,19 @@ user's browser can reach `127.0.0.1`.
 - Static serving must never resolve outside `dist/ui`.
 - Project paths from the client are resolved and checked against an allowlist.
 - Package names and versions are validated before reaching a subprocess, and commands
-  are spawned with an argv array and `shell: false`. Package names may not begin with
-  `-`, or a package manager would parse them as flags.
+  are spawned with an argv array and `shell: false`. **There is one validator** —
+  `isValidPackageName` in `core/commands.ts` — and every route that takes a name uses
+  it. Names may not begin with `-` (a package manager would parse them as flags) or
+  with `.` (they are joined into `node_modules/<name>` and into registry URLs, where a
+  dot segment traverses). Uppercase is allowed: `JSONStream` and its generation are
+  still published and still installable.
+- The origin allowlist includes the Vite dev server's port **only when `PACKUI_DEV=1`**.
+  In a released build that port is one any local process can bind.
+- The app shell is served under a Content-Security-Policy with no `unsafe-inline`
+  (`core/../static.ts`), which is why the theme bootstrap lives in
+  `src/ui/public/theme-boot.js` rather than in a `<script>` tag. Every response also
+  carries `nosniff` and `no-referrer`. The CSP is the second layer under the README
+  renderer: it is what makes a future bug in the renderer non-exploitable.
 - READMEs are untrusted third-party text. They go through the renderer in
   `src/ui/composables/markdown.ts`, which is safe by construction: raw HTML is
   translated to Markdown *before* escaping and any untranslated tag is dropped, so
@@ -112,6 +134,10 @@ and `npm root -g` alone is not enough:
 So `core/global.ts` asks each package manager *and* probes the known version-manager
 layouts (volta, nvm, fnm, asdf, n, Homebrew, system), then dedupes by real path.
 
+A volta root is one tool's private `lib/node_modules`, not a global root, so a
+`GlobalRoot` carries the name of the tool that owns it and only that entry is read.
+Anything else in there belongs to the tool, not to the user.
+
 Global mutations go through whichever tool owns the package — volta tools are upgraded
 with `volta install`, never `npm install -g`, which would install a second copy where
 volta's shims never look. Globals have no manifest or lockfile, so there is nothing to
@@ -139,6 +165,20 @@ packui opens the user's default browser, so Chrome cannot be assumed.
 Overlays use platform primitives: `<dialog>` for the drawer, the Popover API for
 popovers and version dropdowns. There is no component library and should not be one.
 
+## Versioning and releases
+
+Commit messages are load-bearing, not a style preference. release-please reads them
+from `main`, keeps a release PR open with the version they imply, and writes
+`CHANGELOG.md`. Merging that PR tags the release; the tag triggers the publish job.
+
+- `fix:` → patch, `feat:` → minor, `feat!:` or a `BREAKING CHANGE:` footer → major.
+- Stay on `0.x` until the HTTP API and the mutation model settle. Under release-please's
+  node strategy a breaking change in `0.x` bumps the minor, which is the intended signal.
+- **Never publish by hand.** A hand-published version has no provenance attestation and
+  no changelog entry, and nothing afterwards can say what it was built from.
+- `prepack` builds and re-runs `verify:deps`. `dist/` is gitignored and `files` ships it,
+  so publishing without building produces a package whose `bin` cannot start.
+
 ## Conventions
 
 - TypeScript is pinned to 5.x because `vue-tsc` does not yet support the TypeScript 7
@@ -155,7 +195,13 @@ popovers and version dropdowns. There is no component library and should not be 
   since it is the readme for the version actually installed.
 - Latest versions and deprecation come from the *abbreviated* packument
   (`Accept: application/vnd.npm.install-v1+json`); the full document is megabytes for
-  popular packages. Requests are ETag-aware and cached under `~/.packui`.
+  popular packages. Drawer metadata comes from the per-version document at
+  `/<pkg>/latest` for the same reason — never fetch the full packument. Both are
+  ETag-aware and cached under `~/.packui`, which is pruned at boot.
+- Advisories are cached per `name@version`, never per request. A version's advisories
+  are the same in every project, so the entries are shared; keying on the whole
+  dependency set meant one bump invalidated everything and no two projects shared
+  anything. "No advisories" is cached too — it is the common answer.
 - Vulnerabilities come from OSV.dev, not `npm audit`, so one code path covers all four
   package managers. Severity requires a per-advisory request, so only packages that
   actually have advisories pay for it.
