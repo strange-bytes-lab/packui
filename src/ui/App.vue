@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import AlignmentBanner from '@/components/AlignmentBanner.vue'
 import DependencyTable from '@/components/DependencyTable.vue'
+import PackageDrawer from '@/components/PackageDrawer.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import { useFilters } from '@/composables/useFilters'
 import { loadProject, useProject } from '@/stores/useProject'
 
 const { report, loading, enriching, error, enrichError, project, dependencies } = useProject()
 const { query, kind, problemsOnly, filtered } = useFilters(dependencies)
+
+const selectedPackage = ref<string | null>(null)
 
 onMounted(() => void loadProject())
 </script>
@@ -56,9 +59,11 @@ onMounted(() => void loadProject())
           {{ filtered.length }} of {{ dependencies.length }} dependencies
           <span v-if="enriching" class="summary-note">· checking the registry…</span>
         </p>
-        <DependencyTable :rows="filtered" />
+        <DependencyTable :rows="filtered" @select="selectedPackage = $event" />
       </template>
     </main>
+
+    <PackageDrawer :package-name="selectedPackage" @close="selectedPackage = null" />
   </div>
 </template>
 

@@ -98,9 +98,12 @@ export async function fetchManyPackageInfos(
   return new Map(names.map((name, index) => [name, infos[index] ?? null]))
 }
 
-/** The full packument carries the README; only fetched when a drawer opens. */
+/**
+ * Metadata for the drawer, from the full packument. The README is NOT here:
+ * the registry returns an empty `readme` field these days, so it is read from
+ * node_modules instead — see core/readme.ts.
+ */
 export interface PackageDetail {
-  readme: string | null
   homepage: string | null
   repository: string | null
   license: string | null
@@ -119,7 +122,6 @@ export async function fetchPackageDetail(
     if (!response.ok) return cached?.value ?? null
 
     const full = (await response.json()) as {
-      readme?: unknown
       homepage?: unknown
       license?: unknown
       description?: unknown
@@ -134,7 +136,6 @@ export async function fetchPackageDetail(
           : null
 
     const detail: PackageDetail = {
-      readme: typeof full.readme === 'string' ? full.readme : null,
       homepage: typeof full.homepage === 'string' ? full.homepage : null,
       repository: repositoryUrl,
       license: typeof full.license === 'string' ? full.license : null,

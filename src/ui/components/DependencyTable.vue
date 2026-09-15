@@ -4,6 +4,7 @@ import StatusDot from './StatusDot.vue'
 import VulnerabilityBadge from './VulnerabilityBadge.vue'
 
 defineProps<{ rows: readonly DependencyRow[] }>()
+const emit = defineEmits<{ select: [name: string] }>()
 
 const KIND_LABELS: Record<DependencyRow['kind'], string> = {
   prod: 'dep',
@@ -36,7 +37,9 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
           />
         </td>
         <td class="col-name">
-          <span class="name">{{ row.name }}</span>
+          <button type="button" class="name" @click="emit('select', row.name)">
+            {{ row.name }}
+          </button>
         </td>
         <td class="col-kind">
           <span class="tag">{{ KIND_LABELS[row.kind] }}</span>
@@ -128,7 +131,18 @@ td {
 }
 
 .name {
+  padding: 0;
+  font: inherit;
   font-weight: 500;
+  color: var(--text);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.name:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .absent {
