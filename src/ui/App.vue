@@ -2,15 +2,34 @@
 import { onMounted, ref } from 'vue'
 import AlignmentBanner from '@/components/AlignmentBanner.vue'
 import DependencyTable from '@/components/DependencyTable.vue'
+import MutationConsole from '@/components/MutationConsole.vue'
 import PackageDrawer from '@/components/PackageDrawer.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import { useFilters } from '@/composables/useFilters'
+import { requestMutation } from '@/composables/useMutation'
 import { loadProject, useProject } from '@/stores/useProject'
+import type { DependencyRow } from '@shared/types'
 
 const { report, loading, enriching, error, enrichError, project, dependencies } = useProject()
 const { query, kind, problemsOnly, filtered } = useFilters(dependencies)
 
 const selectedPackage = ref<string | null>(null)
+
+function upgradeRow(row: DependencyRow): void {
+  if (row.latest === null) return
+  requestMutation({ action: 'upgrade', name: row.name, version: row.latest, kind: row.kind })
+}
+
+function removeRow(row: DependencyRow): void {
+  requestMutation({ action: 'remove', name: row.name, kind: row.kind })
+}
+
+/** Picking a specific version in the drawer routes through the same confirmation. */
+function upgradeToVersion(name: string, version: string): void {
+  const row = dependencies.value.find((candidate) => candidate.name === name)
+  requestMutation({ action: 'upgrade', name, version, kind: row?.kind ?? 'prod' })
+  selectedPackage.value = null
+}
 
 onMounted(() => void loadProject())
 </script>
@@ -59,11 +78,21 @@ onMounted(() => void loadProject())
           {{ filtered.length }} of {{ dependencies.length }} dependencies
           <span v-if="enriching" class="summary-note">· checking the registry…</span>
         </p>
-        <DependencyTable :rows="filtered" @select="selectedPackage = $event" />
+        <DependencyTable
+          :rows="filtered"
+          @select="selectedPackage = $event"
+          @upgrade="upgradeRow"
+          @remove="removeRow"
+        />
       </template>
     </main>
 
-    <PackageDrawer :package-name="selectedPackage" @close="selectedPackage = null" />
+    <PackageDrawer
+      :package-name="selectedPackage"
+      @close="selectedPackage = null"
+      @upgrade="upgradeToVersion"
+    />
+    <MutationConsole @finished="loadProject()" />
   </div>
 </template>
 
