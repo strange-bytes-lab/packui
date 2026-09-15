@@ -76,10 +76,10 @@ function removeRow(row: DependencyRow): void {
   removalCandidate.value = row.name
 }
 
-function confirmRemoval(name: string, kind: DependencyKind): void {
+function confirmRemoval(name: string, dependencyKind: DependencyKind): void {
   removalCandidate.value = null
   // The server rejects a removal whose `confirm` does not match the name exactly.
-  requestMutation({ action: 'remove', name, kind, confirm: name })
+  requestMutation({ action: 'remove', name, kind: dependencyKind, confirm: name })
 }
 
 /** Picking a specific version in the drawer routes through the same confirmation. */

@@ -26,6 +26,9 @@
     "build:ui": "vite build",
     "build:server": "node scripts/build-server.mjs",
     "typecheck": "vue-tsc --build",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:deps": "node scripts/verify-no-runtime-deps.mjs"
@@ -37,6 +40,8 @@
     "@vitejs/plugin-vue": "^6.0.9",
     "esbuild": "^0.28.2",
     "jsdom": "^30.0.1",
+    "oxlint": "^1.83.0",
+    "prettier": "^3.9.6",
     "semver": "^7.8.5",
     "typescript": "^5.9.3",
     "vite": "^8.3.0",

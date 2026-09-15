@@ -63,7 +63,7 @@ function buildMatcher(packageName: string): RegExp {
   )
 }
 
-async function* walk(root: string, current: string, budget: { left: number }): AsyncGenerator<string> {
+async function* walk(current: string, budget: { left: number }): AsyncGenerator<string> {
   if (budget.left <= 0) return
 
   let entries
@@ -79,7 +79,7 @@ async function* walk(root: string, current: string, budget: { left: number }): A
 
     if (entry.isDirectory()) {
       if (SKIP_DIRECTORIES.has(entry.name) || entry.name.startsWith('.')) continue
-      yield* walk(root, full, budget)
+      yield* walk(full, budget)
       continue
     }
 
@@ -101,7 +101,7 @@ export async function findUsages(
   const budget = { left: MAX_FILES }
   let filesScanned = 0
 
-  for await (const file of walk(projectPath, projectPath, budget)) {
+  for await (const file of walk(projectPath, budget)) {
     filesScanned += 1
 
     try {

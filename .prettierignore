@@ -1,0 +1,5 @@
+dist/
+node_modules/
+pnpm-lock.yaml
+# Deliberately hand-shaped: the fixtures assert exact file contents.
+test/fixtures/
