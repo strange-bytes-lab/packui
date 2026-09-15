@@ -1,0 +1,67 @@
+name: Release
+
+# packui is versioned from its commit messages. release-please keeps a release PR
+# open with the next version and the changelog it implies; merging that PR is the
+# act of releasing, and is the only way a version reaches npm.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+
+  publish:
+    name: publish to npm
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for provenance: npm verifies the attestation against this workflow,
+      # which is what makes the published tarball traceable to a commit and a run.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Not strictly needed — `prepack` builds — but a failure here fails the job
+      # before anything is uploaded, rather than half way through publishing.
+      - name: Build
+        run: pnpm build
+
+      - name: Check the zero-dependency promise one last time
+        run: pnpm verify:deps
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
