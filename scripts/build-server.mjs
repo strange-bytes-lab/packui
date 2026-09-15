@@ -15,7 +15,10 @@ const result = await build({
   // Node builtins are external automatically under platform: 'node'.
   packages: 'bundle',
   minify: false,
-  sourcemap: true,
+  // 'external' rather than 'linked': the map is written for debugging a report
+  // against this build, but it is not published, so a sourceMappingURL pointing at
+  // a file that will not be in the tarball would be a dangling reference.
+  sourcemap: 'external',
   metafile: true,
   logLevel: 'info',
 })

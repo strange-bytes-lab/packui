@@ -1,10 +1,29 @@
 {
   "name": "packui",
   "version": "0.0.0",
-  "private": true,
   "description": "A local GUI for inspecting and upgrading your NPM dependencies.",
   "type": "module",
   "license": "MIT",
+  "author": "Antonis Panos",
+  "homepage": "https://github.com/strange-bytes-lab/packui#readme",
+  "bugs": {
+    "url": "https://github.com/strange-bytes-lab/packui/issues"
+  },
+  "keywords": [
+    "npm",
+    "dependencies",
+    "outdated",
+    "upgrade",
+    "audit",
+    "vulnerabilities",
+    "osv",
+    "lockfile",
+    "gui",
+    "cli",
+    "pnpm",
+    "yarn",
+    "bun"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/strange-bytes-lab/packui.git"
@@ -14,7 +33,8 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist/server/index.js",
+    "dist/ui"
   ],
   "engines": {
     "node": ">=22"
@@ -25,6 +45,7 @@
     "build": "pnpm build:ui && pnpm build:server",
     "build:ui": "vite build",
     "build:server": "node scripts/build-server.mjs",
+    "prepack": "pnpm build && pnpm verify:deps",
     "typecheck": "vue-tsc --build",
     "lint": "oxlint",
     "format": "prettier --write .",
@@ -48,5 +69,8 @@
     "vitest": "^5.0.0",
     "vue": "^3.5.42",
     "vue-tsc": "^3.3.11"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
