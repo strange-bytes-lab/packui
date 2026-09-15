@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DependencyRow } from '@shared/types'
 import StatusDot from './StatusDot.vue'
+import VulnerabilityBadge from './VulnerabilityBadge.vue'
 
 defineProps<{ rows: readonly DependencyRow[] }>()
 
@@ -22,18 +23,20 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
         <th class="col-version">Declared</th>
         <th class="col-version">Installed</th>
         <th class="col-version">Latest</th>
+        <th class="col-flags">Flags</th>
       </tr>
     </thead>
     <tbody>
       <tr v-for="row in rows" :key="row.name" class="row">
         <td class="col-status">
-          <StatusDot :outdated="row.outdated" :alignment="row.alignment" />
+          <StatusDot
+            :outdated="row.outdated"
+            :alignment="row.alignment"
+            :vulnerabilities="row.vulnerabilities"
+          />
         </td>
         <td class="col-name">
           <span class="name">{{ row.name }}</span>
-          <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
-            deprecated
-          </span>
         </td>
         <td class="col-kind">
           <span class="tag">{{ KIND_LABELS[row.kind] }}</span>
@@ -46,6 +49,12 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
         <td class="col-version mono">
           <span v-if="row.latest" :data-severity="row.outdated">{{ row.latest }}</span>
           <span v-else class="absent">—</span>
+        </td>
+        <td class="col-flags">
+          <VulnerabilityBadge :vulnerabilities="row.vulnerabilities" />
+          <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
+            deprecated
+          </span>
         </td>
       </tr>
     </tbody>
@@ -102,7 +111,15 @@ td {
 }
 
 .col-version {
-  inline-size: 140px;
+  inline-size: 130px;
+}
+
+.col-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: 37px;
 }
 
 .mono {
@@ -136,7 +153,6 @@ td {
 }
 
 .tag--danger {
-  margin-inline-start: var(--space-2);
   color: var(--danger);
   border-color: color-mix(in oklab, var(--danger) 35%, transparent);
   background: color-mix(in oklab, var(--danger) 10%, transparent);

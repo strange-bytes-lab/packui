@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import type { ProjectAccess } from './api/access.ts'
 import { createDepsHandler } from './api/deps.ts'
+import { createEnrichHandler } from './api/enrich.ts'
 import { Router, sendError, sendJson } from './router.ts'
 import { hasAllowedOrigin, hasValidToken, sessionToken } from './security.ts'
 import { serveStatic } from './static.ts'
@@ -29,7 +31,10 @@ function buildRouter(options: StartOptions): Router {
 
   // Only the project packui was launched against is readable for now. The sidebar's
   // multi-project list will extend this allowlist rather than remove it.
-  router.get('/api/deps', createDepsHandler({ allowedProjects: () => [options.projectPath] }))
+  const access: ProjectAccess = { allowedProjects: () => [options.projectPath] }
+
+  router.get('/api/deps', createDepsHandler(access))
+  router.get('/api/enrich', createEnrichHandler(access))
 
   return router
 }
