@@ -6,7 +6,7 @@ import Sidebar from '@/components/Sidebar.vue'
 import { useFilters } from '@/composables/useFilters'
 import { loadProject, useProject } from '@/stores/useProject'
 
-const { report, loading, error, project, dependencies } = useProject()
+const { report, loading, enriching, error, enrichError, project, dependencies } = useProject()
 const { query, kind, problemsOnly, filtered } = useFilters(dependencies)
 
 onMounted(() => void loadProject())
@@ -49,8 +49,12 @@ onMounted(() => void loadProject())
           :alignment="report.alignment"
           :package-manager="report.project.packageManager"
         />
+        <p v-if="enrichError" class="status status--warn">
+          {{ enrichError }} — showing local data only.
+        </p>
         <p class="summary">
           {{ filtered.length }} of {{ dependencies.length }} dependencies
+          <span v-if="enriching" class="summary-note">· checking the registry…</span>
         </p>
         <DependencyTable :rows="filtered" />
       </template>
@@ -145,5 +149,14 @@ button:disabled {
 
 .status--error {
   color: var(--danger);
+}
+
+.status--warn {
+  margin-block-end: var(--space-3);
+  color: var(--minor);
+}
+
+.summary-note {
+  color: var(--text-muted);
 }
 </style>
