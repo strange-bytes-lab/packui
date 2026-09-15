@@ -93,9 +93,7 @@ export function isValidPackageName(name: string): boolean {
   if (name.startsWith('@')) {
     const slash = name.indexOf('/')
     if (slash === -1) return false
-    return (
-      NAME_SEGMENT.test(name.slice(1, slash)) && NAME_SEGMENT.test(name.slice(slash + 1))
-    )
+    return NAME_SEGMENT.test(name.slice(1, slash)) && NAME_SEGMENT.test(name.slice(slash + 1))
   }
 
   return NAME_SEGMENT.test(name)

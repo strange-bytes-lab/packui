@@ -58,10 +58,18 @@ const state = computed(() => {
   background: currentColor;
 }
 
-.dot[data-tone='ok'] { color: var(--ok); }
-.dot[data-tone='patch'] { color: var(--patch); }
-.dot[data-tone='minor'] { color: var(--minor); }
-.dot[data-tone='major'] { color: var(--major); }
+.dot[data-tone='ok'] {
+  color: var(--ok);
+}
+.dot[data-tone='patch'] {
+  color: var(--patch);
+}
+.dot[data-tone='minor'] {
+  color: var(--minor);
+}
+.dot[data-tone='major'] {
+  color: var(--major);
+}
 .dot[data-tone='unknown'] {
   color: var(--border-strong);
   background: none;

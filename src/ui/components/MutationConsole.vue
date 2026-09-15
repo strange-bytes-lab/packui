@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import {
-  cancelMutation,
-  confirmMutation,
-  rollback,
-  useMutation,
-} from '@/composables/useMutation'
+import { cancelMutation, confirmMutation, rollback, useMutation } from '@/composables/useMutation'
 
 const emit = defineEmits<{ finished: [] }>()
 
@@ -64,8 +59,8 @@ function close(): void {
       <pre class="command">{{ preview }}</pre>
 
       <p v-if="phase === 'confirming'" class="note">
-        packui runs your project's own package manager, so it stays in charge of the
-        lockfile. package.json and the lockfile are backed up first.
+        packui runs your project's own package manager, so it stays in charge of the lockfile.
+        package.json and the lockfile are backed up first.
       </p>
 
       <pre v-if="output" ref="log" class="log">{{ output }}</pre>

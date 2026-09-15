@@ -28,7 +28,11 @@ export interface RemovalImpact {
   risk: 'safe' | 'caution' | 'breaking'
 }
 
-function assessRisk(usageCount: number, dependents: number, truncated: boolean): RemovalImpact['risk'] {
+function assessRisk(
+  usageCount: number,
+  dependents: number,
+  truncated: boolean,
+): RemovalImpact['risk'] {
   // Anything importing it will break at runtime the moment it is gone.
   if (usageCount > 0) return 'breaking'
   // Another package needing it leaves an unmet dependency after removal.
@@ -40,7 +44,10 @@ function assessRisk(usageCount: number, dependents: number, truncated: boolean):
 
 export function createImpactHandler(access: ProjectAccess) {
   return async ({ res, url }: RequestContext): Promise<void> => {
-    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+    const projectPath = resolveAllowedProject(
+      url.searchParams.get('path'),
+      access.allowedProjects(),
+    )
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return

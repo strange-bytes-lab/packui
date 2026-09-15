@@ -7,10 +7,7 @@ import { resolveAllowedProject, type ProjectAccess } from './access.ts'
 import type { DependencyReport } from '../../shared/types.ts'
 
 /** Builds the local report for whichever scope was asked for, or null if unknown. */
-async function reportFor(
-  url: URL,
-  access: ProjectAccess,
-): Promise<DependencyReport | null> {
+async function reportFor(url: URL, access: ProjectAccess): Promise<DependencyReport | null> {
   if (url.searchParams.get('scope') === 'global') {
     const scope = findScope(await detectGlobalScopes(), url.searchParams.get('id'))
     if (scope === undefined) return null

@@ -7,7 +7,9 @@ import { readFile } from 'node:fs/promises'
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 
 const runtimeFields = ['dependencies', 'peerDependencies', 'optionalDependencies']
-const offenders = runtimeFields.flatMap((field) => Object.keys(pkg[field] ?? {}).map((name) => `${field}.${name}`))
+const offenders = runtimeFields.flatMap((field) =>
+  Object.keys(pkg[field] ?? {}).map((name) => `${field}.${name}`),
+)
 
 if (offenders.length > 0) {
   console.error('\n  packui must ship zero runtime dependencies. Found:')

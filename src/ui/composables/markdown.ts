@@ -95,7 +95,10 @@ function htmlToMarkdown(source: string): string {
 
   // Angle-bracket autolinks must be converted before the tag stripper runs, or
   // `<https://example.test>` looks exactly like a tag and gets eaten.
-  text = text.replace(/<((?:https?|mailto):[^\s>]+)>/gi, (_match, url: string) => `[${url}](${url})`)
+  text = text.replace(
+    /<((?:https?|mailto):[^\s>]+)>/gi,
+    (_match, url: string) => `[${url}](${url})`,
+  )
 
   // Line breaks and horizontal rules.
   text = text.replace(/<br\s*\/?>/gi, '\n')
@@ -120,7 +123,10 @@ function htmlToMarkdown(source: string): string {
   text = text.replace(
     /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi,
     (_match, level: string, inner: string) => {
-      const content = inner.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+      const content = inner
+        .replace(/<[^>]*>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
       return content === '' ? '\n' : `\n\n${'#'.repeat(Number(level))} ${content}\n\n`
     },
   )
@@ -163,11 +169,7 @@ function extractLinkDefinitions(source: string): {
  * Phase 2 — inline rendering
  * ------------------------------------------------------------------ */
 
-function renderInline(
-  escaped: string,
-  sentinel: string,
-  definitions: Map<string, string>,
-): string {
+function renderInline(escaped: string, sentinel: string, definitions: Map<string, string>): string {
   let output = escaped
 
   // Code spans come out first so their contents are never read as emphasis, a link,
@@ -208,8 +210,10 @@ function renderInline(
   output = output.replace(/&lt;(https?:\/\/[^\s&]+)&gt;/g, (_match, url: string) =>
     link(escapeHtml(url), url),
   )
-  output = output.replace(/(^|[\s(])(https?:\/\/[^\s<>"')\]]+)/g, (match, lead: string, url: string) =>
-    output.includes(`href="${url}`) ? match : `${lead}${link(escapeHtml(url), url)}`,
+  output = output.replace(
+    /(^|[\s(])(https?:\/\/[^\s<>"')\]]+)/g,
+    (match, lead: string, url: string) =>
+      output.includes(`href="${url}`) ? match : `${lead}${link(escapeHtml(url), url)}`,
   )
 
   output = output.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
@@ -304,7 +308,9 @@ export function renderMarkdown(source: string): string {
       flushParagraph()
       closeAllLists()
       // Capped at h4 so a readme cannot outrank the drawer's own heading.
-      output.push(`<h${Math.min(atx[1].length + 1, 4)}>${inline(atx[2])}</h${Math.min(atx[1].length + 1, 4)}>`)
+      output.push(
+        `<h${Math.min(atx[1].length + 1, 4)}>${inline(atx[2])}</h${Math.min(atx[1].length + 1, 4)}>`,
+      )
       continue
     }
 
@@ -340,9 +346,7 @@ export function renderMarkdown(source: string): string {
       }
 
       // Task list checkboxes render as glyphs; a real input would imply it is editable.
-      const content = item[2]
-        .replace(/^\[ \]\s+/, '☐ ')
-        .replace(/^\[[xX]\]\s+/, '☑ ')
+      const content = item[2].replace(/^\[ \]\s+/, '☐ ').replace(/^\[[xX]\]\s+/, '☑ ')
 
       output.push(`<li>${inline(content)}</li>`)
       continue

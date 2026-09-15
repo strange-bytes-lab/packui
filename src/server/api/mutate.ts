@@ -159,11 +159,7 @@ export function createMutateHandler(access: ProjectAccess) {
     // Removal is the only action here that breaks a project at runtime rather than
     // at install time, and the only one an upgrade cannot undo by moving forward.
     if (action === 'remove' && body.confirm !== body.name) {
-      sendError(
-        res,
-        400,
-        'Removal requires a "confirm" field exactly matching the package name',
-      )
+      sendError(res, 400, 'Removal requires a "confirm" field exactly matching the package name')
       return
     }
 
@@ -240,7 +236,8 @@ export function createMutateHandler(access: ProjectAccess) {
         let failure: { code: number | null; error: string | null } | null = null
 
         for (const built of commands) {
-          if (commands.length > 1) send('output', { type: 'stdout', text: `\n$ ${built.display}\n` })
+          if (commands.length > 1)
+            send('output', { type: 'stdout', text: `\n$ ${built.display}\n` })
           const result = await runCommand(
             projectPath,
             built,
@@ -280,7 +277,10 @@ export function createRollbackHandler(access: ProjectAccess) {
   return async (ctx: RequestContext): Promise<void> => {
     const { res, url } = ctx
 
-    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+    const projectPath = resolveAllowedProject(
+      url.searchParams.get('path'),
+      access.allowedProjects(),
+    )
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return
@@ -315,7 +315,12 @@ export function createRollbackHandler(access: ProjectAccess) {
         send('restored', { id: restored.id, files: restored.files })
 
         if (detection.packageManager === null) {
-          send('done', { ok: true, code: 0, error: null, note: 'Files restored; run an install manually.' })
+          send('done', {
+            ok: true,
+            code: 0,
+            error: null,
+            note: 'Files restored; run an install manually.',
+          })
           res.end()
           return
         }
@@ -351,7 +356,10 @@ export function createRollbackHandler(access: ProjectAccess) {
 
 export function createSnapshotsHandler(access: ProjectAccess) {
   return async ({ res, url }: RequestContext): Promise<void> => {
-    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+    const projectPath = resolveAllowedProject(
+      url.searchParams.get('path'),
+      access.allowedProjects(),
+    )
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return

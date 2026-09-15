@@ -55,7 +55,9 @@ function onKeydown(event: KeyboardEvent): void {
 /** Everything with a known newer version. Vulnerable packages sort to the front. */
 const outdated = computed<BatchPackage[]>(() =>
   dependencies.value
-    .filter((row) => row.latest !== null && row.outdated !== 'current' && row.outdated !== 'unknown')
+    .filter(
+      (row) => row.latest !== null && row.outdated !== 'current' && row.outdated !== 'unknown',
+    )
     .map((row) => ({ name: row.name, version: row.latest as string, kind: row.kind })),
 )
 
@@ -104,12 +106,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <div class="shell">
-    <Sidebar
-      :project="project"
-      :scopes="globalScopes"
-      :selection="selection"
-      @select="select"
-    />
+    <Sidebar :project="project" :scopes="globalScopes" :selection="selection" @select="select" />
 
     <main class="content">
       <header class="toolbar">

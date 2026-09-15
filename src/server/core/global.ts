@@ -96,7 +96,10 @@ async function askForRoot(
 
     // Some of these print warnings alongside the path, so take the last line that
     // actually looks like one.
-    const lines = stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+    const lines = stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
     for (const line of lines.reverse()) {
       if (!line.startsWith('/') && !/^[A-Za-z]:\\/.test(line)) continue
       // `yarn global dir` returns the parent of node_modules, unlike `root -g`.
@@ -142,10 +145,7 @@ async function voltaPackageRoots(): Promise<GlobalRoot[]> {
 
 async function voltaActiveNodeVersion(): Promise<string | null> {
   try {
-    const raw = await readFile(
-      join(homedir(), '.volta', 'tools', 'user', 'platform.json'),
-      'utf8',
-    )
+    const raw = await readFile(join(homedir(), '.volta', 'tools', 'user', 'platform.json'), 'utf8')
     const parsed = JSON.parse(raw) as { node?: { runtime?: unknown } }
     return typeof parsed.node?.runtime === 'string' ? parsed.node.runtime : null
   } catch {
@@ -166,11 +166,36 @@ interface VersionedLayout {
 }
 
 const VERSIONED_LAYOUTS: VersionedLayout[] = [
-  { installer: 'npm', manager: 'nvm', base: join(homedir(), '.nvm', 'versions', 'node'), suffix: ['lib', 'node_modules'] },
-  { installer: 'npm', manager: 'volta', base: join(homedir(), '.volta', 'tools', 'image', 'node'), suffix: ['lib', 'node_modules'] },
-  { installer: 'npm', manager: 'asdf', base: join(homedir(), '.asdf', 'installs', 'nodejs'), suffix: ['lib', 'node_modules'] },
-  { installer: 'npm', manager: 'fnm', base: join(homedir(), '.local', 'share', 'fnm', 'node-versions'), suffix: ['installation', 'lib', 'node_modules'] },
-  { installer: 'npm', manager: 'fnm', base: join(homedir(), 'Library', 'Application Support', 'fnm', 'node-versions'), suffix: ['installation', 'lib', 'node_modules'] },
+  {
+    installer: 'npm',
+    manager: 'nvm',
+    base: join(homedir(), '.nvm', 'versions', 'node'),
+    suffix: ['lib', 'node_modules'],
+  },
+  {
+    installer: 'npm',
+    manager: 'volta',
+    base: join(homedir(), '.volta', 'tools', 'image', 'node'),
+    suffix: ['lib', 'node_modules'],
+  },
+  {
+    installer: 'npm',
+    manager: 'asdf',
+    base: join(homedir(), '.asdf', 'installs', 'nodejs'),
+    suffix: ['lib', 'node_modules'],
+  },
+  {
+    installer: 'npm',
+    manager: 'fnm',
+    base: join(homedir(), '.local', 'share', 'fnm', 'node-versions'),
+    suffix: ['installation', 'lib', 'node_modules'],
+  },
+  {
+    installer: 'npm',
+    manager: 'fnm',
+    base: join(homedir(), 'Library', 'Application Support', 'fnm', 'node-versions'),
+    suffix: ['installation', 'lib', 'node_modules'],
+  },
 ]
 
 /** Fixed locations used by n, Homebrew and system installs. */
