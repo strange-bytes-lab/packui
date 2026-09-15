@@ -8,11 +8,11 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/packui"><img alt="npm" src="https://img.shields.io/npm/v/packui?color=%23cb3837&label=npm"></a>
+  <a href="https://www.npmjs.com/package/@strange-bytes/packui"><img alt="npm" src="https://img.shields.io/npm/v/%40strange-bytes%2Fpackui?color=%23cb3837&label=npm"></a>
   <a href="https://github.com/strange-bytes-lab/packui/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/strange-bytes-lab/packui/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="node" src="https://img.shields.io/node/v/packui">
+  <img alt="node" src="https://img.shields.io/node/v/%40strange-bytes%2Fpackui">
   <img alt="dependencies" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen">
-  <img alt="license" src="https://img.shields.io/npm/l/packui">
+  <img alt="license" src="https://img.shields.io/npm/l/%40strange-bytes%2Fpackui">
 </p>
 
 ---
@@ -20,7 +20,7 @@
 ## 🚀 Quick start
 
 ```sh
-npx packui
+npx @strange-bytes/packui
 ```
 
 That's it. No install, no config, no account.
@@ -29,9 +29,9 @@ packui reads the project in your current directory, starts a server on
 `127.0.0.1:7225` and opens your browser.
 
 ```sh
-npx packui ~/dev/some-other-project   # a project somewhere else
-npx packui --port 8080                # a different port
-npx packui --no-open                  # don't open a browser
+npx @strange-bytes/packui ~/dev/some-other-project   # a project somewhere else
+npx @strange-bytes/packui --port 8080                # a different port
+npx @strange-bytes/packui --no-open                  # don't open a browser
 ```
 
 > [!IMPORTANT]

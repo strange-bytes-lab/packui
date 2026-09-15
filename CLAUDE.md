@@ -1,6 +1,6 @@
 # packui
 
-A local GUI for inspecting and upgrading a project's NPM dependencies. `npx packui`
+A local GUI for inspecting and upgrading a project's NPM dependencies. `npx @strange-bytes/packui`
 boots a loopback HTTP server and opens a browser SPA showing one row per dependency
 with its declared range, installed version, latest version, vulnerability state and
 lockfile alignment — and can run the upgrade for you.
