@@ -173,6 +173,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           {{ isGlobal ? 'global packages' : 'dependencies' }}
           <span v-if="enriching" class="summary-note">· checking the registry…</span>
         </p>
+
+        <div
+          v-if="loading || enriching"
+          class="progress"
+          role="progressbar"
+          aria-label="Checking the registry"
+        />
       </div>
 
       <div
@@ -202,6 +209,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             v-else
             :rows="filtered"
             :global="isGlobal"
+            :pending="enriching"
             @select="selectedPackage = $event"
             @upgrade="upgradeRow"
             @remove="removeRow"
@@ -343,6 +351,48 @@ button:disabled {
 
 .summary-note {
   color: var(--text-muted);
+}
+
+/*
+ * Indeterminate: the server answers enrichment in one response, so there is no
+ * progress to report — only the fact that it is still running. Bled to the full width
+ * of the column so it reads as the boundary between the head and the table.
+ */
+.progress {
+  block-size: 2px;
+  margin-inline: calc(-1 * var(--space-5));
+  overflow: hidden;
+  background: var(--bg-sunken);
+}
+
+.progress::after {
+  content: '';
+  display: block;
+  block-size: 100%;
+  inline-size: 35%;
+  background: var(--accent);
+  animation: progress-sweep 1.1s ease-in-out infinite;
+}
+
+@keyframes progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(286%);
+  }
+}
+
+/*
+ * themes.css clamps every animation to 0.01ms under reduced motion, which would leave
+ * the sweep frozen at an arbitrary point and read as a stalled bar. Show a static one.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .progress::after {
+    inline-size: 100%;
+    opacity: 0.4;
+    animation: none;
+  }
 }
 
 .empty-state {
