@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { DependencyRow } from '@shared/types'
+import { computed } from 'vue'
 import { fuzzyMatch, highlight, type Segment } from '@/composables/fuzzy'
+import type { SortDirection, SortKey } from '@/composables/sorting'
 import StatusDot from './StatusDot.vue'
 import VulnerabilityBadge from './VulnerabilityBadge.vue'
 
@@ -11,12 +13,49 @@ const props = defineProps<{
   pending?: boolean
   /** The active filter, so the matched characters can be marked in the name. */
   query?: string
+  sortKey?: SortKey | null
+  sortDirection?: SortDirection
 }>()
 const emit = defineEmits<{
   select: [name: string]
   upgrade: [row: DependencyRow]
   remove: [row: DependencyRow]
+  sort: [key: SortKey]
 }>()
+
+interface Column {
+  key: SortKey
+  label: string
+  className: string
+  /** Kind and Declared mean nothing for a global scope, which has no manifest. */
+  projectOnly?: boolean
+  /** The status dot needs no visible heading; the column is one glyph wide. */
+  hideLabel?: boolean
+}
+
+const COLUMNS: readonly Column[] = [
+  { key: 'status', label: 'Status', className: 'col-status', hideLabel: true },
+  { key: 'name', label: 'Package', className: 'col-name' },
+  { key: 'kind', label: 'Kind', className: 'col-kind', projectOnly: true },
+  { key: 'declared', label: 'Declared', className: 'col-version', projectOnly: true },
+  { key: 'installed', label: 'Installed', className: 'col-version' },
+  { key: 'latest', label: 'Latest', className: 'col-version' },
+  { key: 'flags', label: 'Flags', className: 'col-flags' },
+]
+
+const columns = computed(() =>
+  COLUMNS.filter((column) => column.projectOnly !== true || props.global !== true),
+)
+
+function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
+  if (props.sortKey !== key) return 'none'
+  return props.sortDirection === 'desc' ? 'descending' : 'ascending'
+}
+
+function indicator(key: SortKey): string {
+  if (props.sortKey !== key) return '↕'
+  return props.sortDirection === 'desc' ? '↓' : '↑'
+}
 
 /**
  * Which characters of the name the filter matched. A scattered subsequence match is
@@ -51,13 +90,23 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
   <table class="table" :aria-busy="props.pending">
     <thead>
       <tr>
-        <th class="col-status"><span class="sr-only">Status</span></th>
-        <th class="col-name">Package</th>
-        <th v-if="!props.global" class="col-kind">Kind</th>
-        <th v-if="!props.global" class="col-version">Declared</th>
-        <th class="col-version">Installed</th>
-        <th class="col-version">Latest</th>
-        <th class="col-flags">Flags</th>
+        <th
+          v-for="column in columns"
+          :key="column.key"
+          :class="column.className"
+          :aria-sort="ariaSort(column.key)"
+        >
+          <button
+            type="button"
+            class="sort"
+            :data-active="props.sortKey === column.key"
+            :title="`Sort by ${column.label.toLowerCase()}`"
+            @click="emit('sort', column.key)"
+          >
+            <span :class="{ 'sr-only': column.hideLabel }">{{ column.label }}</span>
+            <span class="indicator" aria-hidden="true">{{ indicator(column.key) }}</span>
+          </button>
+        </th>
         <th class="col-actions"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
@@ -155,6 +204,38 @@ thead th {
   color: var(--text-faint);
   background: var(--bg);
   border-block-end: 1px solid var(--border);
+}
+
+.sort {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.sort:hover {
+  color: var(--text);
+}
+
+/* The arrow is a hint until the column is the one in use. */
+.indicator {
+  opacity: 0;
+}
+
+.sort:hover .indicator,
+.sort:focus-visible .indicator,
+.sort[data-active='true'] .indicator {
+  opacity: 1;
+}
+
+.sort[data-active='true'] {
+  color: var(--accent);
 }
 
 [data-scrolled='true'] thead th {

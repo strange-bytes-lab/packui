@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import DependencyTable from '../src/ui/components/DependencyTable.vue'
 import type { DependencyRow } from '../src/shared/types.ts'
+import type { SortDirection, SortKey } from '../src/ui/composables/sorting.ts'
 
 /**
  * The whole row opens the drawer, and the row also carries the two actions that
@@ -25,7 +26,14 @@ function row(overrides: Partial<DependencyRow> = {}): DependencyRow {
   }
 }
 
-function mountTable(props: { rows: DependencyRow[]; pending?: boolean; query?: string }) {
+function mountTable(props: {
+  rows: DependencyRow[]
+  pending?: boolean
+  query?: string
+  global?: boolean
+  sortKey?: SortKey
+  sortDirection?: SortDirection
+}) {
   // Attached to the document: a detached tree has no selection, which the
   // drag-selection case below depends on.
   return mount(DependencyTable, { props, attachTo: document.body })
@@ -116,5 +124,43 @@ describe('DependencyTable — filter highlighting', () => {
 
     expect(table.get('button.name').text()).toBe('left-pad')
     expect(table.findAll('.hit')).toHaveLength(0)
+  })
+})
+
+describe('DependencyTable — column sorting', () => {
+  it('asks for a sort when a header is clicked', async () => {
+    const table = mountTable({ rows: [row()] })
+
+    await table.get('th.col-name button.sort').trigger('click')
+
+    expect(table.emitted('sort')).toEqual([['name']])
+  })
+
+  it('reports the active column to assistive technology', () => {
+    const table = mountTable({ rows: [row()], sortKey: 'latest', sortDirection: 'desc' })
+
+    expect(table.get('th.col-name').attributes('aria-sort')).toBe('none')
+    const latest = table.findAll('th.col-version').at(-1)
+    expect(latest?.attributes('aria-sort')).toBe('descending')
+  })
+
+  it('offers no Kind or Declared column for a global scope', () => {
+    const table = mountTable({ rows: [row()], global: true })
+
+    expect(table.findAll('th.col-kind')).toHaveLength(0)
+    expect(table.findAll('th.col-version')).toHaveLength(2)
+  })
+
+  it('keeps the status dot and the status sort in agreement', () => {
+    const vulnerable = row({
+      outdated: 'patch',
+      vulnerabilities: { count: 1, worst: 'critical', ids: [] },
+    })
+    const table = mountTable({ rows: [vulnerable] })
+
+    // rowStatus is shared with compareRows; if it drifts, this label changes.
+    expect(table.get('.dot').attributes('aria-label')).toBe(
+      'Vulnerable — critical severity advisory',
+    )
   })
 })

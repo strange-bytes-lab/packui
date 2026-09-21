@@ -23,7 +23,8 @@ const {
   project,
   dependencies,
 } = useProject()
-const { query, kind, problemsOnly, filtered } = useFilters(dependencies)
+const { query, kind, problemsOnly, sortKey, sortDirection, toggleSort, filtered } =
+  useFilters(dependencies)
 
 const selectedPackage = ref<string | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
@@ -253,9 +254,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             :global="isGlobal"
             :pending="enriching"
             :query="query"
+            :sort-key="sortKey"
+            :sort-direction="sortDirection"
             @select="selectedPackage = $event"
             @upgrade="upgradeRow"
             @remove="removeRow"
+            @sort="toggleSort"
           />
         </template>
       </div>

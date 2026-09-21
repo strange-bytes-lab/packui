@@ -1,6 +1,12 @@
 import { computed, ref, type Ref } from 'vue'
 import type { DependencyRow } from '@shared/types'
 import { fuzzyMatch } from '@/composables/fuzzy'
+import {
+  compareRows,
+  FIRST_DIRECTION,
+  type SortDirection,
+  type SortKey,
+} from '@/composables/sorting'
 
 export type KindFilter = 'all' | 'prod' | 'dev'
 
@@ -9,6 +15,28 @@ export function useFilters(rows: Ref<readonly DependencyRow[]>) {
   const query = ref('')
   const kind = ref<KindFilter>('all')
   const problemsOnly = ref(false)
+  const sortKey = ref<SortKey | null>(null)
+  const sortDirection = ref<SortDirection>('asc')
+
+  /**
+   * Three states per column: the direction that column leads with, its opposite, then
+   * off. "Off" has to be reachable, because it is the only way back to relevance order
+   * while a filter is typed.
+   */
+  function toggleSort(key: SortKey): void {
+    if (sortKey.value !== key) {
+      sortKey.value = key
+      sortDirection.value = FIRST_DIRECTION[key]
+      return
+    }
+
+    if (sortDirection.value === FIRST_DIRECTION[key]) {
+      sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+      return
+    }
+
+    sortKey.value = null
+  }
 
   const filtered = computed(() => {
     const needle = query.value.trim()
@@ -31,13 +59,17 @@ export function useFilters(rows: Ref<readonly DependencyRow[]>) {
       kept.push({ row, score: match.score })
     }
 
-    // With nothing typed every score is 0, so the server's order is preserved.
-    if (needle !== '') {
+    const key = sortKey.value
+    if (key !== null) {
+      // An explicit column sort outranks relevance: the user asked for this order.
+      kept.sort((a, b) => compareRows(a.row, b.row, key, sortDirection.value))
+    } else if (needle !== '') {
       kept.sort((a, b) => b.score - a.score || a.row.name.localeCompare(b.row.name))
     }
+    // With nothing typed and no column chosen, the server's order is preserved.
 
     return kept.map((entry) => entry.row)
   })
 
-  return { query, kind, problemsOnly, filtered }
+  return { query, kind, problemsOnly, sortKey, sortDirection, toggleSort, filtered }
 }
