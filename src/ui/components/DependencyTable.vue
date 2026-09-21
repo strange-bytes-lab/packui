@@ -15,6 +15,18 @@ const emit = defineEmits<{
   remove: [row: DependencyRow]
 }>()
 
+/**
+ * The whole row opens the drawer. This is a pointer convenience layered on top of the
+ * name button, which stays the keyboard path — a focusable <tr> would add a tab stop
+ * per dependency and put a button role on a table row.
+ */
+function onRowClick(row: DependencyRow): void {
+  // A click that ended a drag-selection is a selection, not a navigation. Without this
+  // the version strings could not be copied.
+  if ((window.getSelection()?.toString() ?? '') !== '') return
+  emit('select', row.name)
+}
+
 const KIND_LABELS: Record<DependencyRow['kind'], string> = {
   prod: 'dep',
   dev: 'dev',
@@ -38,7 +50,7 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="row in rows" :key="row.name" class="row">
+      <tr v-for="row in rows" :key="row.name" class="row" @click="onRowClick(row)">
         <td class="col-status">
           <StatusDot
             :outdated="row.outdated"
@@ -47,7 +59,7 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
           />
         </td>
         <td class="col-name">
-          <button type="button" class="name" @click="emit('select', row.name)">
+          <button type="button" class="name" @click.stop="emit('select', row.name)">
             {{ row.name }}
           </button>
         </td>
@@ -81,7 +93,7 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
             type="button"
             class="action"
             :title="`Upgrade to ${row.latest}`"
-            @click="emit('upgrade', row)"
+            @click.stop="emit('upgrade', row)"
           >
             Upgrade
           </button>
@@ -89,7 +101,7 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
             type="button"
             class="action action--danger"
             :title="`Remove ${row.name}`"
-            @click="emit('remove', row)"
+            @click.stop="emit('remove', row)"
           >
             Remove
           </button>
@@ -135,6 +147,7 @@ thead th {
 }
 
 .row {
+  cursor: pointer;
   /* Keeps offscreen rows out of layout and paint on large dependency lists. */
   content-visibility: auto;
   contain-intrinsic-size: auto 37px;
@@ -185,6 +198,13 @@ td {
 .row:hover .action,
 .action:focus-visible {
   opacity: 1;
+}
+
+/* A touch pointer never hovers, so hidden-until-hover means unreachable. */
+@media (hover: none) {
+  .action {
+    opacity: 1;
+  }
 }
 
 .action:hover {
