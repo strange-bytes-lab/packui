@@ -3,7 +3,12 @@ import type { DependencyRow } from '@shared/types'
 import StatusDot from './StatusDot.vue'
 import VulnerabilityBadge from './VulnerabilityBadge.vue'
 
-const props = defineProps<{ rows: readonly DependencyRow[]; global?: boolean }>()
+const props = defineProps<{
+  rows: readonly DependencyRow[]
+  global?: boolean
+  /** Registry data is in flight. Declared and Installed come from disk and stay real. */
+  pending?: boolean
+}>()
 const emit = defineEmits<{
   select: [name: string]
   upgrade: [row: DependencyRow]
@@ -19,7 +24,7 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
 </script>
 
 <template>
-  <table class="table">
+  <table class="table" :aria-busy="props.pending">
     <thead>
       <tr>
         <th class="col-status"><span class="sr-only">Status</span></th>
@@ -55,15 +60,19 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
           <span v-else class="absent">not installed</span>
         </td>
         <td class="col-version mono">
-          <span v-if="row.latest" :data-severity="row.outdated">{{ row.latest }}</span>
+          <span v-if="props.pending" class="skeleton skeleton--version" aria-hidden="true" />
+          <span v-else-if="row.latest" :data-severity="row.outdated">{{ row.latest }}</span>
           <span v-else class="absent">—</span>
         </td>
         <td class="col-flags">
           <div class="flags">
-            <VulnerabilityBadge :vulnerabilities="row.vulnerabilities" />
-            <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
-              deprecated
-            </span>
+            <span v-if="props.pending" class="skeleton skeleton--flag" aria-hidden="true" />
+            <template v-else>
+              <VulnerabilityBadge :vulnerabilities="row.vulnerabilities" />
+              <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
+                deprecated
+              </span>
+            </template>
           </div>
         </td>
         <td class="col-actions">
@@ -199,6 +208,50 @@ td {
 .mono {
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+/*
+ * Only the registry-derived cells skeleton. An em dash in Latest means "checked, no
+ * answer", and showing that before the lookup has run would be a claim about the
+ * package rather than a description of the request.
+ */
+.skeleton {
+  display: inline-block;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--bg-sunken) 0%,
+    var(--bg-hover) 50%,
+    var(--bg-sunken) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+.skeleton--version {
+  inline-size: 64px;
+  block-size: 10px;
+}
+
+.skeleton--flag {
+  inline-size: 44px;
+  block-size: 14px;
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    background: var(--bg-sunken);
+    animation: none;
+  }
 }
 
 .name {
