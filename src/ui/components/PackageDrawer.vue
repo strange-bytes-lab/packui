@@ -188,7 +188,7 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
 .drawer {
   margin: 0 0 0 auto;
   padding: 0;
-  inline-size: min(560px, 100vw);
+  inline-size: min(760px, 100vw);
   block-size: 100%;
   max-block-size: 100%;
   color: var(--text);
