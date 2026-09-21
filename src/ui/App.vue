@@ -210,6 +210,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             :rows="filtered"
             :global="isGlobal"
             :pending="enriching"
+            :query="query"
             @select="selectedPackage = $event"
             @upgrade="upgradeRow"
             @remove="removeRow"

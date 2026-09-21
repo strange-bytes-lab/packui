@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DependencyRow } from '@shared/types'
+import { fuzzyMatch, highlight, type Segment } from '@/composables/fuzzy'
 import StatusDot from './StatusDot.vue'
 import VulnerabilityBadge from './VulnerabilityBadge.vue'
 
@@ -8,12 +9,23 @@ const props = defineProps<{
   global?: boolean
   /** Registry data is in flight. Declared and Installed come from disk and stay real. */
   pending?: boolean
+  /** The active filter, so the matched characters can be marked in the name. */
+  query?: string
 }>()
 const emit = defineEmits<{
   select: [name: string]
   upgrade: [row: DependencyRow]
   remove: [row: DependencyRow]
 }>()
+
+/**
+ * Which characters of the name the filter matched. A scattered subsequence match is
+ * hard to read as a match at all unless it is shown.
+ */
+function nameSegments(name: string): Segment[] {
+  const match = fuzzyMatch(name, props.query?.trim() ?? '')
+  return highlight(name, match?.indices ?? [])
+}
 
 /**
  * The whole row opens the drawer. This is a pointer convenience layered on top of the
@@ -59,9 +71,12 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
           />
         </td>
         <td class="col-name">
-          <button type="button" class="name" @click.stop="emit('select', row.name)">
-            {{ row.name }}
-          </button>
+          <!-- prettier-ignore -->
+          <button type="button" class="name" @click.stop="emit('select', row.name)"><span
+            v-for="(segment, index) in nameSegments(row.name)"
+            :key="index"
+            :class="{ hit: segment.matched }"
+          >{{ segment.text }}</span></button>
         </td>
         <td v-if="!props.global" class="col-kind">
           <span class="tag">{{ KIND_LABELS[row.kind] }}</span>
@@ -287,6 +302,11 @@ td {
 .name:hover {
   color: var(--accent);
   text-decoration: underline;
+}
+
+.hit {
+  font-weight: 700;
+  color: var(--accent);
 }
 
 .absent {

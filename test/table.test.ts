@@ -25,7 +25,7 @@ function row(overrides: Partial<DependencyRow> = {}): DependencyRow {
   }
 }
 
-function mountTable(props: { rows: DependencyRow[]; pending?: boolean }) {
+function mountTable(props: { rows: DependencyRow[]; pending?: boolean; query?: string }) {
   // Attached to the document: a detached tree has no selection, which the
   // drag-selection case below depends on.
   return mount(DependencyTable, { props, attachTo: document.body })
@@ -97,5 +97,24 @@ describe('DependencyTable — pending registry data', () => {
 
     expect(table.findAll('.skeleton')).toHaveLength(0)
     expect(table.text()).toContain('1.3.1')
+  })
+})
+
+describe('DependencyTable — filter highlighting', () => {
+  it('marks the matched characters without altering the name', () => {
+    const table = mountTable({ rows: [row({ name: '@vitejs/plugin-vue' })], query: 'pv' })
+
+    const name = table.get('button.name')
+    // The segments are separate elements; the text they add up to must still be the
+    // package name, with no whitespace introduced between them.
+    expect(name.text()).toBe('@vitejs/plugin-vue')
+    expect(name.findAll('.hit').map((hit) => hit.text())).toEqual(['p', 'v'])
+  })
+
+  it('marks nothing when the filter is empty', () => {
+    const table = mountTable({ rows: [row()], query: '' })
+
+    expect(table.get('button.name').text()).toBe('left-pad')
+    expect(table.findAll('.hit')).toHaveLength(0)
   })
 })
