@@ -132,42 +132,15 @@ clean because a lookup failed.
 
 ---
 
-## 🛠️ Development
-
-```sh
-git clone git@github.com:strange-bytes-lab/packui.git
-cd packui
-pnpm install
-
-pnpm dev            # Vite on :7332, API on :7331, both watching
-pnpm test           # 220 tests
-pnpm lint           # oxlint
-pnpm format:check   # prettier
-pnpm typecheck      # vue-tsc across both TS projects
-pnpm build          # dist/ui + dist/server
-pnpm verify:deps    # fails if a runtime dependency crept in
-```
-
-`CLAUDE.md` has the architecture, the security model, and the reasoning behind the
-decisions that aren't obvious from the code.
-
----
-
 ## 🏷️ Versioning
 
-Commit messages are load-bearing. [release-please](https://github.com/googleapis/release-please)
-reads them, keeps a release PR open with the next version and its changelog, and
-publishing happens when that PR is merged — with
-[npm provenance](https://docs.npmjs.com/generating-provenance-statements), so every
-published tarball is traceable to the commit it was built from.
+Every release is published from CI with
+[npm provenance](https://docs.npmjs.com/generating-provenance-statements), so the
+tarball you install is traceable to the commit it was built from. Nothing is ever
+published by hand.
 
-| Commit | Release |
-|---|---|
-| `fix:` | patch |
-| `feat:` | minor |
-| `feat!:` or `BREAKING CHANGE:` | major |
-
-packui stays on `0.x` until the HTTP API and the mutation model settle.
+packui follows semantic versioning and stays on `0.x` until the HTTP API and the
+mutation model settle. The [changelog](CHANGELOG.md) lists what changed in each release.
 
 ---
 
