@@ -59,10 +59,12 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
           <span v-else class="absent">—</span>
         </td>
         <td class="col-flags">
-          <VulnerabilityBadge :vulnerabilities="row.vulnerabilities" />
-          <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
-            deprecated
-          </span>
+          <div class="flags">
+            <VulnerabilityBadge :vulnerabilities="row.vulnerabilities" />
+            <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
+              deprecated
+            </span>
+          </div>
         </td>
         <td class="col-actions">
           <button
@@ -91,9 +93,16 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
 </template>
 
 <style scoped>
+/*
+ * `separate`, not `collapse`. Under `collapse` the borders belong to the table rather
+ * than to the cells, so a sticky header loses its bottom border the moment it detaches.
+ * The trade is that a border on a <tr> is then never painted, so the row rule lives on
+ * the cells.
+ */
 .table {
   inline-size: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
 }
 
@@ -112,11 +121,14 @@ thead th {
   border-block-end: 1px solid var(--border);
 }
 
+[data-scrolled='true'] thead th {
+  box-shadow: 0 4px 8px -6px light-dark(rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.7));
+}
+
 .row {
   /* Keeps offscreen rows out of layout and paint on large dependency lists. */
   content-visibility: auto;
   contain-intrinsic-size: auto 37px;
-  border-block-end: 1px solid var(--border);
 }
 
 .row:hover {
@@ -126,6 +138,7 @@ thead th {
 td {
   padding: var(--space-2) var(--space-3);
   vertical-align: middle;
+  border-block-end: 1px solid var(--border);
 }
 
 .col-status {
@@ -175,12 +188,12 @@ td {
   border-color: var(--danger);
 }
 
-.col-flags {
+.flags {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
-  min-block-size: 37px;
+  min-block-size: 21px;
 }
 
 .mono {

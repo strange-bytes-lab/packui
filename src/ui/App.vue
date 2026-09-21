@@ -29,6 +29,18 @@ const selectedPackage = ref<string | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
 
 /**
+ * The table body is its own scroll container so the toolbar stays put. The sticky
+ * column header only needs to know that it has detached, so this is a boolean rather
+ * than a scroll position — nothing re-renders while scrolling within a state.
+ */
+const tableScroll = ref<HTMLElement | null>(null)
+const scrolled = ref(false)
+
+function onScroll(): void {
+  scrolled.value = (tableScroll.value?.scrollTop ?? 0) > 0
+}
+
+/**
  * Keyboard shortcuts, deliberately few: "/" to jump to the filter and Escape to
  * clear it. Both are ignored while typing in a field, so they never swallow input.
  */
@@ -109,84 +121,93 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <Sidebar :project="project" :scopes="globalScopes" :selection="selection" @select="select" />
 
     <main class="content">
-      <header class="toolbar">
-        <input
-          ref="searchInput"
-          v-model="query"
-          type="search"
-          class="search"
-          placeholder="Filter packages…  /"
-          aria-label="Filter packages by name"
-        />
-        <div class="toolbar-group">
-          <select v-model="kind" aria-label="Dependency kind">
-            <option value="all">All kinds</option>
-            <option value="prod">Dependencies</option>
-            <option value="dev">Dev only</option>
-          </select>
-          <label class="checkbox">
-            <input v-model="problemsOnly" type="checkbox" />
-            Needs attention
-          </label>
-          <button type="button" :disabled="loading" @click="load()">
-            {{ loading ? 'Refreshing…' : 'Refresh' }}
-          </button>
-          <!--
-            Global scopes are upgraded one package at a time: volta, npm -g and the
-            others each own a different store, and batching across them would mean
-            guessing. The server rejects a global batch, so the button is not offered.
-          -->
-          <button
-            v-if="outdated.length > 0 && !isGlobal"
-            type="button"
-            class="cta"
-            @click="upgradeAll"
-          >
-            Upgrade all ({{ outdated.length }})
-          </button>
-        </div>
-      </header>
+      <div class="content-head">
+        <header class="toolbar">
+          <input
+            ref="searchInput"
+            v-model="query"
+            type="search"
+            class="search"
+            placeholder="Filter packages…  /"
+            aria-label="Filter packages by name"
+          />
+          <div class="toolbar-group">
+            <select v-model="kind" aria-label="Dependency kind">
+              <option value="all">All kinds</option>
+              <option value="prod">Dependencies</option>
+              <option value="dev">Dev only</option>
+            </select>
+            <label class="checkbox">
+              <input v-model="problemsOnly" type="checkbox" />
+              Needs attention
+            </label>
+            <button type="button" :disabled="loading" @click="load()">
+              {{ loading ? 'Refreshing…' : 'Refresh' }}
+            </button>
+            <!--
+              Global scopes are upgraded one package at a time: volta, npm -g and the
+              others each own a different store, and batching across them would mean
+              guessing. The server rejects a global batch, so the button is not offered.
+            -->
+            <button
+              v-if="outdated.length > 0 && !isGlobal"
+              type="button"
+              class="cta"
+              @click="upgradeAll"
+            >
+              Upgrade all ({{ outdated.length }})
+            </button>
+          </div>
+        </header>
 
-      <p v-if="error" class="status status--error">{{ error }}</p>
-      <p v-else-if="loading && !report" class="status">Reading project…</p>
-
-      <template v-else-if="report">
         <AlignmentBanner
-          v-if="!isGlobal"
+          v-if="report !== null && !isGlobal"
           :alignment="report.alignment"
           :package-manager="report.project.packageManager"
         />
         <p v-if="enrichError" class="status status--warn">
           {{ enrichError }} — showing local data only.
         </p>
-        <p class="summary">
+        <p v-if="report !== null" class="summary">
           {{ filtered.length }} of {{ dependencies.length }}
           {{ isGlobal ? 'global packages' : 'dependencies' }}
           <span v-if="enriching" class="summary-note">· checking the registry…</span>
         </p>
+      </div>
 
-        <div v-if="dependencies.length === 0" class="empty-state">
-          <p class="empty-title">
-            {{ isGlobal ? 'Nothing installed here.' : 'This project has no dependencies.' }}
-          </p>
-          <p class="empty-body">
-            {{
-              isGlobal
-                ? 'This toolchain has no global packages beyond the ones that ship with it.'
-                : 'Nothing to audit yet. Add a package and refresh.'
-            }}
-          </p>
-        </div>
+      <div
+        ref="tableScroll"
+        class="table-scroll"
+        :data-scrolled="scrolled"
+        @scroll.passive="onScroll"
+      >
+        <p v-if="error" class="status status--error">{{ error }}</p>
+        <p v-else-if="loading && !report" class="status">Reading project…</p>
 
-        <DependencyTable
-          v-else
-          :rows="filtered"
-          :global="isGlobal"
-          @select="selectedPackage = $event"
-          @upgrade="upgradeRow"
-          @remove="removeRow"
-        />
-      </template>
+        <template v-else-if="report">
+          <div v-if="dependencies.length === 0" class="empty-state">
+            <p class="empty-title">
+              {{ isGlobal ? 'Nothing installed here.' : 'This project has no dependencies.' }}
+            </p>
+            <p class="empty-body">
+              {{
+                isGlobal
+                  ? 'This toolchain has no global packages beyond the ones that ship with it.'
+                  : 'Nothing to audit yet. Add a package and refresh.'
+              }}
+            </p>
+          </div>
+
+          <DependencyTable
+            v-else
+            :rows="filtered"
+            :global="isGlobal"
+            @select="selectedPackage = $event"
+            @upgrade="upgradeRow"
+            @remove="removeRow"
+          />
+        </template>
+      </div>
     </main>
 
     <PackageDrawer
@@ -211,11 +232,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   block-size: 100%;
 }
 
+/*
+ * Two regions: a head that stays put and a body that scrolls. The table's sticky
+ * column header pins to the top of the body, which is why the body owns the scroll
+ * rather than the whole column.
+ */
 .content {
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-5);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.content-head {
+  padding: var(--space-5) var(--space-5) 0;
+}
+
+/* No block-start padding: it would sit above the sticky header and show rows through. */
+.table-scroll {
+  min-block-size: 0;
   overflow: auto;
+  padding: 0 var(--space-5) var(--space-5);
 }
 
 .toolbar {
