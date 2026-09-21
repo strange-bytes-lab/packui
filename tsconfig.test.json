@@ -18,12 +18,13 @@
     "allowImportingTsExtensions": true,
     "paths": { "@/*": ["./src/ui/*"], "@shared/*": ["./src/shared/*"] }
   },
-  // Only the plain-TS modules tests import. Pulling in src/ui/**/*.ts would drag
-  // in main.ts and its .vue imports, which belong to the UI project.
+  // Only what the tests import: the components they mount, plus the plain-TS modules.
+  // Pulling in src/ui/**/*.ts would drag in main.ts, which belongs to the UI project.
   "include": [
     "test/**/*.ts",
     "src/server/**/*.ts",
     "src/shared/**/*.ts",
+    "src/ui/components/**/*.vue",
     "src/ui/composables/**/*.ts",
     "src/ui/stores/**/*.ts",
     "src/ui/types/**/*.ts"
