@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.2.0](https://github.com/strange-bytes-lab/packui/compare/packui-v0.1.0...packui-v0.2.0) (2026-09-21)
+
+
+### Features
+
+* fuzzy-match the package filter ([92810ef](https://github.com/strange-bytes-lab/packui/commit/92810eff5c2d2df4eac410ab69f5edea3113dd9c))
+* open the drawer from anywhere in the row ([fa6adab](https://github.com/strange-bytes-lab/packui/commit/fa6adab1cabf04bfc284aac894a27005dffa0dc5))
+* search npmjs.com from the toolbar ([04d71a3](https://github.com/strange-bytes-lab/packui/commit/04d71a31356c10b2e4ccd4cc1502eb5fd23d193d))
+* show that registry and advisory lookups are still running ([6cb3744](https://github.com/strange-bytes-lab/packui/commit/6cb374420b639ee380400fe4e9ae4e30aecc116a))
+* sort the table by any column ([cc531a2](https://github.com/strange-bytes-lab/packui/commit/cc531a2732a03e37479dd3d86865ef52eb518bb3))
+* widen the package drawer ([1cf2728](https://github.com/strange-bytes-lab/packui/commit/1cf272804c2a28639470adf90dbe8d35dbd487ef))
+
+
+### Fixes
+
+* keep the table header and toolbar in view while scrolling ([36d0cc7](https://github.com/strange-bytes-lab/packui/commit/36d0cc76448ab3f58b68ffd95e59e3c25262f0a0))
+
+
+### Refactors
+
+* lift the row status ranking out of StatusDot ([d499ecf](https://github.com/strange-bytes-lab/packui/commit/d499ecf97cae6f0b0f54c03b37532ee2cad6543d))
+
+
+### Documentation
+
+* point the readme at people installing packui, not building it ([962fa11](https://github.com/strange-bytes-lab/packui/commit/962fa11c4939bf426c4cec2508ed64aa75eb2c86))
+
 ## 0.1.0 (2026-09-15)
 
 
