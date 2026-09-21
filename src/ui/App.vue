@@ -33,6 +33,21 @@ const searchInput = ref<HTMLInputElement | null>(null)
  * column header only needs to know that it has detached, so this is a boolean rather
  * than a scroll position — nothing re-renders while scrolling within a state.
  */
+/**
+ * The filter searches what is installed. This searches what is not: it hands the term
+ * to npmjs.com in a new tab, because finding a package to add is a different job from
+ * auditing the ones you have, and packui deliberately has no write path for adding one.
+ */
+const NPM_SEARCH_URL = 'https://www.npmjs.com/search?q=%s'
+const npmQuery = ref('')
+
+function searchNpm(): void {
+  const term = npmQuery.value.trim()
+  if (term === '') return
+  const url = NPM_SEARCH_URL.replace('%s', encodeURIComponent(term))
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 const tableScroll = ref<HTMLElement | null>(null)
 const scrolled = ref(false)
 
@@ -123,14 +138,41 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <main class="content">
       <div class="content-head">
         <header class="toolbar">
-          <input
-            ref="searchInput"
-            v-model="query"
-            type="search"
-            class="search"
-            placeholder="Filter packages…  /"
-            aria-label="Filter packages by name"
-          />
+          <div class="toolbar-search">
+            <input
+              ref="searchInput"
+              v-model="query"
+              type="search"
+              class="search"
+              placeholder="Filter packages…  /"
+              aria-label="Filter packages by name"
+            />
+
+            <div class="npm-search">
+              <input
+                v-model="npmQuery"
+                type="search"
+                class="search search--npm"
+                placeholder="Search npmjs.com…"
+                aria-label="Search npmjs.com for a package"
+                @keyup.enter="searchNpm"
+              />
+              <button
+                type="button"
+                class="icon-button"
+                :disabled="npmQuery.trim() === ''"
+                title="Search npmjs.com in a new tab"
+                aria-label="Search npmjs.com in a new tab"
+                @click="searchNpm"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" />
+                  <path d="M10.5 10.5 L14 14" stroke="currentColor" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
           <div class="toolbar-group">
             <select v-model="kind" aria-label="Dependency kind">
               <option value="all">All kinds</option>
@@ -279,6 +321,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   margin-inline-start: auto;
 }
 
+.toolbar-search {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
 .search {
   flex: 1;
   min-inline-size: 180px;
@@ -289,6 +339,45 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+}
+
+.npm-search {
+  display: flex;
+  flex: 1;
+  min-inline-size: 180px;
+  max-inline-size: 320px;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.search--npm {
+  flex: 1;
+  max-inline-size: none;
+}
+
+.icon-button {
+  display: flex;
+  padding: var(--space-2);
+  color: var(--text-muted);
+  align-items: center;
+  justify-content: center;
+}
+
+/* The shared disabled style is `cursor: progress`, which is right for Refresh and
+   wrong here — nothing is running, there is simply nothing to search for yet. */
+.icon-button:disabled {
+  cursor: default;
+}
+
+.icon-button:not(:disabled):hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.icon-button svg {
+  inline-size: 16px;
+  block-size: 16px;
+  stroke-width: 1.5;
 }
 
 select,
