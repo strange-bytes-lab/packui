@@ -15,7 +15,7 @@ export type AlignmentState =
   | 'aligned'
   | 'missing' // declared but not present in node_modules
   | 'unsatisfied' // installed, but the installed version does not satisfy the declared range
-  | 'stale' // package.json modified more recently than the lockfile
+  | 'stale' // the lockfile records a different range than package.json declares
   | 'unknown' // no node_modules at all; nothing can be concluded
 
 export interface VulnerabilitySummary {
@@ -59,9 +59,24 @@ export interface ProjectSummary {
   hasNodeModules: boolean
 }
 
+/** One dependency where package.json and the lockfile disagree. */
+export interface LockfileDrift {
+  name: string
+  field: 'dependencies' | 'devDependencies' | 'optionalDependencies' | 'peerDependencies'
+  /** The range in package.json, or null when only the lockfile still lists it. */
+  declared: string | null
+  /** The range the lockfile recorded, or null when it has no entry for it. */
+  locked: string | null
+}
+
 export interface DependencyReport {
   project: ProjectSummary
   dependencies: DependencyRow[]
+  /**
+   * Where package.json and the lockfile disagree. Null when the lockfile could not
+   * answer (none, binary, or an unreadable format) — which claims nothing either way.
+   */
+  drift: LockfileDrift[] | null
   /** Project-wide alignment verdict, worst-case across all rows. */
   alignment: AlignmentState
   generatedAt: string

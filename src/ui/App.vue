@@ -207,6 +207,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           v-if="report !== null && !isGlobal"
           :alignment="report.alignment"
           :package-manager="report.project.packageManager"
+          :lockfile="report.project.lockfile"
+          :drift="report.drift"
         />
         <p v-if="enrichError" class="status status--warn">
           {{ enrichError }} — showing local data only.

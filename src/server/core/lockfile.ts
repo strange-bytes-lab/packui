@@ -1,5 +1,3 @@
-import { stat } from 'node:fs/promises'
-import { join } from 'node:path'
 import semver from 'semver'
 import type { AlignmentState } from '../../shared/types.ts'
 
@@ -7,8 +5,9 @@ import type { AlignmentState } from '../../shared/types.ts'
  * Alignment answers "does what's declared match what's installed?" without parsing
  * any lockfile — see the rationale in core/installed.ts.
  *
- * It catches the desyncs that actually bite: a range edited without reinstalling,
- * a dependency added to package.json but never installed, and a stale lockfile.
+ * It catches the desyncs that actually bite: a range edited without reinstalling and
+ * a dependency added to package.json but never installed. Whether the lockfile itself
+ * still matches package.json is a separate question, answered in core/lockdrift.ts.
  */
 
 /**
@@ -31,26 +30,6 @@ export function alignmentForDependency(
   return semver.satisfies(installed, range, { loose: true, includePrerelease: true })
     ? 'aligned'
     : 'unsatisfied'
-}
-
-/**
- * True when package.json has been modified since the lockfile was last written,
- * which usually means someone edited a range and has not installed yet.
- */
-export async function isLockfileStale(
-  projectPath: string,
-  lockfile: string | null,
-): Promise<boolean> {
-  if (lockfile === null) return false
-  try {
-    const [manifestStat, lockStat] = await Promise.all([
-      stat(join(projectPath, 'package.json')),
-      stat(join(projectPath, lockfile)),
-    ])
-    return manifestStat.mtimeMs > lockStat.mtimeMs
-  } catch {
-    return false
-  }
 }
 
 /** Worst-case wins, so the UI can surface a single honest project-level verdict. */

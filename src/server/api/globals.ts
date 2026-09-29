@@ -33,6 +33,7 @@ export function reportForScope(
       hasNodeModules: true,
     },
     dependencies,
+    drift: null,
     // Globals have no manifest to drift from, so there is nothing to report.
     alignment: 'aligned',
     generatedAt: new Date().toISOString(),
