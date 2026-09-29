@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { apiFetch } from '@/composables/useApi'
+import { withSelection } from '@/stores/useProject'
 import type { RemovalImpact } from '@/types/impact'
 import type { DependencyKind } from '@shared/types'
 
@@ -77,7 +78,9 @@ async function load(name: string): Promise<void> {
   }
 
   try {
-    impact.value = await apiFetch<RemovalImpact>(`/impact?name=${encodeURIComponent(name)}`)
+    impact.value = await apiFetch<RemovalImpact>(
+      withSelection(`/impact?name=${encodeURIComponent(name)}`),
+    )
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'Could not analyse this removal'
   } finally {

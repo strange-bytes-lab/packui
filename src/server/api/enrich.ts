@@ -19,6 +19,15 @@ async function reportFor(url: URL, access: ProjectAccess): Promise<DependencyRep
   return projectPath === null ? null : buildReport(projectPath)
 }
 
+/** Lowest precedence first: a workspace root's .npmrc, then the package's own. */
+export function npmrcDirectories(report: DependencyReport): string[] {
+  if (report.project.scope !== 'project') return []
+  const root = report.project.workspace?.root
+  return root === undefined || root === report.project.path
+    ? [report.project.path]
+    : [root, report.project.path]
+}
+
 export function createEnrichHandler(access: ProjectAccess) {
   return async ({ req, res, url }: RequestContext): Promise<void> => {
     // Abort outstanding registry work if the client navigates away or refreshes.
@@ -32,9 +41,7 @@ export function createEnrichHandler(access: ProjectAccess) {
         return
       }
       // Globals have no project .npmrc; the user's own configuration still applies.
-      const config = await loadRegistryConfig(
-        report.project.scope === 'project' ? [report.project.path] : [],
-      )
+      const config = await loadRegistryConfig(npmrcDirectories(report))
       sendJson(res, 200, { rows: await enrichReport(report, controller.signal, config) })
     } catch (error) {
       if (controller.signal.aborted) return

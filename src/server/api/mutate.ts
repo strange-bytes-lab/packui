@@ -10,6 +10,7 @@ import {
 } from '../core/commands.ts'
 import { detectGlobalScopes } from '../core/global.ts'
 import { findScope } from './globals.ts'
+import { projectContext } from '../core/context.ts'
 import { detectPackageManager } from '../core/detect.ts'
 import { runCommand, withProjectLock } from '../core/exec.ts'
 import { sendError, sendJson, type RequestContext } from '../router.ts'
@@ -163,9 +164,14 @@ export function createMutateHandler(access: ProjectAccess) {
       return
     }
 
+    // A workspace package's lockfile, lock and package manager all belong to its root.
+    const context = isGlobal ? null : await projectContext(projectPath)
+    const root = context?.root ?? projectPath
+    const importer = context?.importer
+
     const detection = isGlobal
       ? { packageManager: globalScope?.packageManager ?? null }
-      : await detectPackageManager(projectPath)
+      : await detectPackageManager(root)
 
     if (!isGlobal && detection.packageManager === null) {
       sendError(res, 422, 'Could not determine which package manager this project uses')
@@ -195,6 +201,7 @@ export function createMutateHandler(access: ProjectAccess) {
         commands = buildBatchCommands(
           detection.packageManager as PackageManager,
           batch.map((entry) => ({ action: 'upgrade' as const, ...entry })),
+          importer,
         )
       } else {
         const request: MutationRequest = {
@@ -203,7 +210,7 @@ export function createMutateHandler(access: ProjectAccess) {
           version: typeof body.version === 'string' ? body.version : undefined,
           kind: KINDS.has(body.kind as DependencyKind) ? (body.kind as DependencyKind) : 'prod',
         }
-        commands = [buildCommand(detection.packageManager as PackageManager, request)]
+        commands = [buildCommand(detection.packageManager as PackageManager, request, importer)]
       }
     } catch (error) {
       sendError(res, 400, error instanceof Error ? error.message : 'Invalid request')
@@ -214,7 +221,7 @@ export function createMutateHandler(access: ProjectAccess) {
     ctx.req.on('close', () => controller.abort())
 
     try {
-      await withProjectLock(projectPath, async () => {
+      await withProjectLock(root, async () => {
         const send = openStream(res)
         send('command', { display: commands.map((c) => c.display).join('\n') })
 
@@ -228,7 +235,11 @@ export function createMutateHandler(access: ProjectAccess) {
         } else {
           // One snapshot covers the whole batch, so a partial failure part-way
           // through rolls back to the state before any of it ran.
-          const snapshot = await createSnapshot(projectPath, commands[0]?.display ?? 'mutation')
+          const snapshot = await createSnapshot(
+            projectPath,
+            commands[0]?.display ?? 'mutation',
+            root,
+          )
           snapshotId = snapshot.id
           send('snapshot', { id: snapshot.id, files: snapshot.files })
         }
@@ -239,7 +250,7 @@ export function createMutateHandler(access: ProjectAccess) {
           if (commands.length > 1)
             send('output', { type: 'stdout', text: `\n$ ${built.display}\n` })
           const result = await runCommand(
-            projectPath,
+            root,
             built,
             (event) => send('output', event),
             controller.signal,
@@ -300,18 +311,19 @@ export function createRollbackHandler(access: ProjectAccess) {
     }
     const snapshotId = body.snapshotId
 
-    const detection = await detectPackageManager(projectPath)
+    const { root } = await projectContext(projectPath)
+    const detection = await detectPackageManager(root)
     const controller = new AbortController()
     ctx.req.on('close', () => controller.abort())
 
     try {
-      await withProjectLock(projectPath, async () => {
+      await withProjectLock(root, async () => {
         const send = openStream(res)
 
         // Snapshot the broken state too, so a rollback is itself undoable.
-        await createSnapshot(projectPath, 'before rollback').catch(() => null)
+        await createSnapshot(projectPath, 'before rollback', root).catch(() => null)
 
-        const restored = await restoreSnapshot(projectPath, snapshotId)
+        const restored = await restoreSnapshot(projectPath, snapshotId, root)
         send('restored', { id: restored.id, files: restored.files })
 
         if (detection.packageManager === null) {
@@ -329,7 +341,7 @@ export function createRollbackHandler(access: ProjectAccess) {
         send('command', { display: install.display })
 
         const result = await runCommand(
-          projectPath,
+          root,
           install,
           (event) => send('output', event),
           controller.signal,

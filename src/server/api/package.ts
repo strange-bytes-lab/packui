@@ -1,5 +1,6 @@
 import semver from 'semver'
 import { isValidPackageName } from '../core/commands.ts'
+import { projectContext } from '../core/context.ts'
 import { isPrivatelyScoped, loadRegistryConfig } from '../core/npmrc.ts'
 import { fetchAdvisory, queryVulnerabilities, type AdvisoryDetail } from '../core/osv.ts'
 import { fetchPackageDetail, fetchPackageInfo, type PackageDetail } from '../core/registry.ts'
@@ -83,13 +84,14 @@ export function createPackageHandler(access: ProjectAccess) {
     req.on('close', () => controller.abort())
 
     try {
-      const installed = await readInstalledVersion(projectPath, name)
-      const config = await loadRegistryConfig([projectPath])
+      const { root } = await projectContext(projectPath)
+      const installed = await readInstalledVersion(projectPath, name, root)
+      const config = await loadRegistryConfig(root === projectPath ? [root] : [root, projectPath])
 
       const [info, detail, readme, advisoryIds] = await Promise.all([
         fetchPackageInfo(name, controller.signal, config),
         fetchPackageDetail(name, controller.signal, config),
-        readLocalReadme(projectPath, name),
+        readLocalReadme(projectPath, name, root),
         installed === null || isPrivatelyScoped(config, name)
           ? Promise.resolve(new Map<string, string[]>())
           : queryVulnerabilities([{ name, version: installed }], controller.signal),

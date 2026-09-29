@@ -4,11 +4,18 @@ import AlignmentBanner from '@/components/AlignmentBanner.vue'
 import DependencyTable from '@/components/DependencyTable.vue'
 import MutationConsole from '@/components/MutationConsole.vue'
 import PackageDrawer from '@/components/PackageDrawer.vue'
+import RangeMismatches from '@/components/RangeMismatches.vue'
 import RemoveDialog from '@/components/RemoveDialog.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import { useFilters } from '@/composables/useFilters'
 import { requestMutation, type BatchPackage } from '@/composables/useMutation'
-import { load, loadGlobalScopes, useProject, type Selection } from '@/stores/useProject'
+import {
+  load,
+  loadGlobalScopes,
+  loadWorkspace,
+  useProject,
+  type Selection,
+} from '@/stores/useProject'
 import type { DependencyKind, DependencyRow } from '@shared/types'
 
 const {
@@ -22,6 +29,8 @@ const {
   isGlobal,
   project,
   dependencies,
+  workspace,
+  mismatches,
 } = useProject()
 const { query, kind, problemsOnly, sortKey, sortDirection, toggleSort, filtered } =
   useFilters(dependencies)
@@ -119,6 +128,12 @@ function upgradeToVersion(name: string, version: string): void {
   selectedPackage.value = null
 }
 
+/** A change can alter ranges across the workspace, not only the table being shown. */
+function onMutationFinished(): void {
+  void load()
+  if (workspace.value !== null) void loadWorkspace()
+}
+
 function select(target: Selection): void {
   void load(target)
 }
@@ -126,6 +141,7 @@ function select(target: Selection): void {
 onMounted(() => {
   void load({ kind: 'project' })
   void loadGlobalScopes()
+  void loadWorkspace()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -134,7 +150,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <div class="shell">
-    <Sidebar :project="project" :scopes="globalScopes" :selection="selection" @select="select" />
+    <Sidebar
+      :project="project"
+      :scopes="globalScopes"
+      :selection="selection"
+      :workspace="workspace"
+      @select="select"
+    />
 
     <main class="content">
       <div class="content-head">
@@ -210,6 +232,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           :lockfile="report.project.lockfile"
           :drift="report.drift"
         />
+        <RangeMismatches
+          v-if="report?.project.workspace && !isGlobal"
+          :mismatches="mismatches"
+          :relative="report.project.workspace.relative"
+        />
         <p v-if="enrichError" class="status status--warn">
           {{ enrichError }} — showing local data only.
         </p>
@@ -278,7 +305,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       @close="removalCandidate = null"
       @confirm="confirmRemoval"
     />
-    <MutationConsole @finished="load()" />
+    <MutationConsole @finished="onMutationFinished" />
   </div>
 </template>
 

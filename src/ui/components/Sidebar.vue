@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import type { ProjectSummary } from '@shared/types'
 import { useTheme } from '@/composables/useTheme'
-import type { GlobalScopeSummary, Selection } from '@/stores/useProject'
+import type { GlobalScopeSummary, Selection, WorkspaceSummary } from '@/stores/useProject'
 
-defineProps<{
+const props = defineProps<{
   project: ProjectSummary | null
   scopes: readonly GlobalScopeSummary[]
   selection: Selection
+  workspace?: WorkspaceSummary | null
 }>()
+
+/** The package the table shows, when it shows one — matched by path, not by name. */
+function isCurrent(path: string): boolean {
+  return props.selection.kind === 'project' && props.project?.path === path
+}
 
 const emit = defineEmits<{ select: [target: Selection] }>()
 
@@ -24,7 +30,29 @@ function scopeHint(scope: GlobalScopeSummary): string {
   <aside class="sidebar">
     <div class="brand">packui</div>
 
-    <nav class="section">
+    <!--
+      A workspace replaces the single project entry: the launched project is one of its
+      packages, and listing it twice would make the highlight ambiguous.
+    -->
+    <nav v-if="workspace" class="section">
+      <span class="section-label">Workspace</span>
+      <ul class="list">
+        <li v-for="member in workspace.packages" :key="member.path">
+          <button
+            type="button"
+            class="entry"
+            :aria-current="isCurrent(member.path)"
+            @click="emit('select', { kind: 'project', path: member.path })"
+          >
+            <span class="entry-name">{{ member.name }}</span>
+            <span v-if="member.relative === '.'" class="pm">root</span>
+          </button>
+          <span v-if="member.relative !== '.'" class="entry-hint">{{ member.relative }}</span>
+        </li>
+      </ul>
+    </nav>
+
+    <nav v-else class="section">
       <span class="section-label">Project</span>
       <ul v-if="project" class="list">
         <li>

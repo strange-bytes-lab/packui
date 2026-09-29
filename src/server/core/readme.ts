@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { resolvePackageDir } from './installed.ts'
 
 /**
  * Reads a package's README from node_modules.
@@ -26,8 +27,10 @@ const MAX_BYTES = 512 * 1024
 export async function readLocalReadme(
   projectPath: string,
   packageName: string,
+  stopAt?: string,
 ): Promise<string | null> {
-  const packageDir = join(projectPath, 'node_modules', packageName)
+  const packageDir = await resolvePackageDir(projectPath, packageName, stopAt)
+  if (packageDir === null) return null
 
   let entries: string[]
   try {

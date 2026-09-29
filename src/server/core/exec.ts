@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { join } from 'node:path'
 import type { BuiltCommand } from './commands.ts'
 
 /**
@@ -32,7 +33,7 @@ export function runCommand(
 ): Promise<ExecResult> {
   return new Promise<ExecResult>((resolve) => {
     const child = spawn(built.command, built.args, {
-      cwd: projectPath,
+      cwd: built.cwd === undefined ? projectPath : join(projectPath, built.cwd),
       shell: false,
       env: {
         ...process.env,

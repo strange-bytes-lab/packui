@@ -66,6 +66,14 @@ export interface ProjectSummary {
   packageManager: PackageManager | null
   lockfile: string | null
   hasNodeModules: boolean
+  /** Set when this project is a package in a workspace. The lockfile lives at `root`. */
+  workspace?: WorkspaceMembership | null
+}
+
+export interface WorkspaceMembership {
+  root: string
+  /** POSIX path from the root, `.` for the root package itself. */
+  relative: string
 }
 
 /** One dependency where package.json and the lockfile disagree. */

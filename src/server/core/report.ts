@@ -7,6 +7,7 @@ import type {
   DependencyRow,
   OutdatedSeverity,
 } from '../../shared/types.ts'
+import { projectContext } from './context.ts'
 import { detectPackageManager } from './detect.ts'
 import { readInstalledVersions } from './installed.ts'
 import { findLockfileDrift } from './lockdrift.ts'
@@ -60,17 +61,25 @@ export function outdatedSeverity(
  * this immediately and fills in latest versions and vulnerabilities as they arrive.
  */
 export async function buildReport(projectPath: string): Promise<DependencyReport> {
+  const context = await projectContext(projectPath)
   const [manifest, detection] = await Promise.all([
     readManifest(projectPath),
-    detectPackageManager(projectPath),
+    // A workspace package has no lockfile of its own; the root's is the one that counts.
+    detectPackageManager(context.root),
   ])
 
   const installed = await readInstalledVersions(
     projectPath,
     manifest.dependencies.map((dependency) => dependency.name),
+    context.root,
   )
 
-  const drift = await findLockfileDrift(projectPath, detection.lockfile, '.', manifest.raw)
+  const drift = await findLockfileDrift(
+    context.root,
+    detection.lockfile,
+    context.importer,
+    manifest.raw,
+  )
   const drifted = new Set((drift ?? []).map((entry) => entry.name))
 
   const dependencies: DependencyRow[] = manifest.dependencies.map((dependency) => {
@@ -107,6 +116,8 @@ export async function buildReport(projectPath: string): Promise<DependencyReport
       packageManager: detection.packageManager,
       lockfile: detection.lockfile,
       hasNodeModules: detection.hasNodeModules,
+      workspace:
+        context.workspace === null ? null : { root: context.root, relative: context.importer },
     },
     dependencies,
     drift,
