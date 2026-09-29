@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AlignmentBanner from '@/components/AlignmentBanner.vue'
 import DependencyTable from '@/components/DependencyTable.vue'
+import InsightsDialog, { type InsightsTab } from '@/components/InsightsDialog.vue'
 import MutationConsole from '@/components/MutationConsole.vue'
 import PackageDrawer from '@/components/PackageDrawer.vue'
 import RangeMismatches from '@/components/RangeMismatches.vue'
@@ -33,7 +34,18 @@ const {
   workspace,
   mismatches,
   recentProjects,
+  treeAudit,
+  auditing,
+  auditError,
 } = useProject()
+
+const insightsTab = ref<InsightsTab | null>(null)
+
+/** Opening a package from the insights dialog lands on the same drawer as the table. */
+function selectFromInsights(name: string): void {
+  insightsTab.value = null
+  selectedPackage.value = name
+}
 const { query, kind, problemsOnly, sortKey, sortDirection, toggleSort, filtered } =
   useFilters(dependencies)
 
@@ -215,6 +227,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <input v-model="problemsOnly" type="checkbox" />
               Needs attention
             </label>
+            <button
+              v-if="!isGlobal && report !== null"
+              type="button"
+              title="Indirect advisories, weight and duplicates, unused and undeclared dependencies"
+              @click="insightsTab = 'advisories'"
+            >
+              Insights
+            </button>
             <button type="button" :disabled="loading" @click="load()">
               {{ loading ? 'Refreshing…' : 'Refresh' }}
             </button>
@@ -246,6 +266,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           :mismatches="mismatches"
           :relative="report.project.workspace.relative"
         />
+        <p v-if="treeAudit && treeAudit.vulnerable.length > 0 && !isGlobal" class="indirect">
+          {{ treeAudit.vulnerable.length }}
+          {{ treeAudit.vulnerable.length === 1 ? 'package' : 'packages' }} deeper in the tree
+          {{ treeAudit.vulnerable.length === 1 ? 'has' : 'have' }} advisories.
+          <button type="button" class="inline-link" @click="insightsTab = 'advisories'">
+            Review
+          </button>
+        </p>
         <p v-if="enrichError" class="status status--warn">
           {{ enrichError }} — showing local data only.
         </p>
@@ -253,6 +281,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           {{ filtered.length }} of {{ dependencies.length }}
           {{ isGlobal ? 'global packages' : 'dependencies' }}
           <span v-if="enriching" class="summary-note">· checking the registry…</span>
+          <span v-else-if="auditing" class="summary-note">· auditing the installed tree…</span>
         </p>
 
         <div
@@ -292,6 +321,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             :global="isGlobal"
             :pending="enriching"
             :query="query"
+            :indirect="treeAudit?.byDirect ?? null"
             :sort-key="sortKey"
             :sort-direction="sortDirection"
             @select="selectedPackage = $event"
@@ -313,6 +343,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       :global="isGlobal"
       @close="removalCandidate = null"
       @confirm="confirmRemoval"
+    />
+    <InsightsDialog
+      :open="insightsTab"
+      :audit="treeAudit"
+      :auditing="auditing"
+      :audit-error="auditError"
+      :package-manager="project?.packageManager ?? null"
+      @close="insightsTab = null"
+      @select="selectFromInsights"
     />
     <MutationConsole @finished="onMutationFinished" />
   </div>
@@ -479,6 +518,22 @@ button:disabled {
 .status--warn {
   margin-block-end: var(--space-3);
   color: var(--minor);
+}
+
+.indirect {
+  margin: 0 0 var(--space-3);
+  font-size: 13px;
+  color: var(--major);
+}
+
+.inline-link {
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .summary-note {

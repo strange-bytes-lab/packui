@@ -65,7 +65,11 @@ function buildMatcher(packageName: string): RegExp {
   )
 }
 
-async function* walk(current: string, budget: { left: number }): AsyncGenerator<string> {
+async function* walk(
+  current: string,
+  budget: { left: number },
+  exclude: ReadonlySet<string> = new Set(),
+): AsyncGenerator<string> {
   if (budget.left <= 0) return
 
   let entries
@@ -81,7 +85,8 @@ async function* walk(current: string, budget: { left: number }): AsyncGenerator<
 
     if (entry.isDirectory()) {
       if (SKIP_DIRECTORIES.has(entry.name) || entry.name.startsWith('.')) continue
-      yield* walk(full, budget)
+      if (exclude.has(full)) continue
+      yield* walk(full, budget, exclude)
       continue
     }
 
@@ -188,4 +193,93 @@ export async function findDependents(projectPath: string, packageName: string): 
   }
 
   return dependents.filter((name) => name !== packageName).sort()
+}
+
+/* ------------------------------------------------------------------ *
+ * Every import, for the unused / undeclared view
+ * ------------------------------------------------------------------ */
+
+/** Every static or dynamic import target on a line. Global, so one line can hold several. */
+const IMPORT_TARGET =
+  /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire(?:\.resolve)?\s*\(\s*|\bexport\s[^'"`;]*?from\s*)['"`]([^'"`\s]+)['"`]/g
+
+/**
+ * `// @vitest-environment jsdom` and `@jest-environment` load a package by name without
+ * importing it. Jest also accepts the short form of `jest-environment-<name>`.
+ */
+const ENVIRONMENT_PRAGMA = /@(vitest|jest)-environment\s+([\w@/.-]+)/
+
+function pragmaTargets(line: string): string[] {
+  const match = ENVIRONMENT_PRAGMA.exec(line)
+  if (match?.[2] === undefined) return []
+  return match[1] === 'jest' ? [match[2], `jest-environment-${match[2]}`] : [match[2]]
+}
+
+/**
+ * The package a bare specifier names, or null for anything that is not one: relative
+ * and absolute paths, `node:` and other protocols, subpath imports (`#internal`), and
+ * the `@/` and `~/` aliases bundlers conventionally map to the source tree.
+ */
+export function packageNameOf(specifier: string): string | null {
+  if (/^[./#~]/.test(specifier) || specifier.startsWith('@/')) return null
+  if (specifier.includes(':')) return null
+  const parts = specifier.split('/')
+  if (specifier.startsWith('@')) {
+    return parts.length >= 2 && parts[0] !== '@' ? `${parts[0]}/${parts[1]}` : null
+  }
+  return parts[0] ?? null
+}
+
+export interface ImportScan {
+  /** Package name to the places it is imported. */
+  imports: Map<string, Usage[]>
+  /** Packages loaded by name without an import, such as a test-environment pragma. */
+  loaded: Set<string>
+  filesScanned: number
+  truncated: boolean
+}
+
+/**
+ * Collects every package imported anywhere under `projectPath`. `exclude` holds
+ * directories to skip — a workspace root passes its member packages, whose imports are
+ * theirs to declare, not the root's.
+ */
+export async function scanImports(
+  projectPath: string,
+  exclude: ReadonlySet<string> = new Set(),
+): Promise<ImportScan> {
+  const imports = new Map<string, Usage[]>()
+  const loaded = new Set<string>()
+  const budget = { left: MAX_FILES }
+  let filesScanned = 0
+
+  for await (const file of walk(projectPath, budget, exclude)) {
+    filesScanned += 1
+    try {
+      const info = await stat(file)
+      if (info.size > MAX_FILE_BYTES) continue
+      const lines = (await readFile(file, 'utf8')).split(/\r?\n/)
+      lines.forEach((line, index) => {
+        // A pragma proves a package is used, but its short jest form names no real
+        // package, so it never counts toward "undeclared".
+        for (const target of pragmaTargets(line)) loaded.add(target)
+        for (const match of line.matchAll(IMPORT_TARGET)) {
+          const target = match[1] ?? ''
+          const name = packageNameOf(target)
+          if (name === null) continue
+          const list = imports.get(name) ?? []
+          list.push({
+            file: relative(projectPath, file),
+            line: index + 1,
+            snippet: line.trim().slice(0, 200),
+          })
+          imports.set(name, list)
+        }
+      })
+    } catch {
+      // An unreadable file is not a reason to fail the whole scan.
+    }
+  }
+
+  return { imports, loaded, filesScanned, truncated: budget.left <= 0 }
 }

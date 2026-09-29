@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import type { DependencyReport } from '@shared/types'
 import { apiFetch } from '@/composables/useApi'
+import type { TreeAudit } from '@/types/insights'
 
 interface EnrichedRow {
   name: string
@@ -58,6 +59,11 @@ const enrichError = ref<string | null>(null)
 const workspace = ref<WorkspaceSummary | null>(null)
 const mismatches = ref<RangeMismatch[]>([])
 const recentProjects = ref<RecentProjectSummary[]>([])
+const treeAudit = ref<TreeAudit | null>(null)
+const auditing = ref(false)
+const auditError = ref<string | null>(null)
+let auditGeneration = 0
+let auditInFlight: AbortController | null = null
 
 /**
  * Enrichment is slow and the sidebar is fast, so a response can arrive after the user
@@ -148,6 +154,35 @@ export async function load(target: Selection = selection.value): Promise<void> {
   }
 
   await enrich()
+  await audit()
+}
+
+/**
+ * Advisories in indirect dependencies. Runs after the table has its registry data,
+ * because it walks every installed package and asks OSV about each — the table must
+ * never wait on it. Global scopes have no tree of their own to walk.
+ */
+async function audit(): Promise<void> {
+  const generation = ++auditGeneration
+  auditInFlight?.abort()
+  treeAudit.value = null
+  auditError.value = null
+  if (report.value?.project.scope !== 'project') return
+
+  const controller = new AbortController()
+  auditInFlight = controller
+  auditing.value = true
+  try {
+    const result = await apiFetch<TreeAudit>(withSelection('/audit'), {
+      signal: controller.signal,
+    })
+    if (generation === auditGeneration) treeAudit.value = result
+  } catch (cause) {
+    if (generation !== auditGeneration) return
+    auditError.value = cause instanceof Error ? cause.message : 'Could not audit the tree'
+  } finally {
+    if (generation === auditGeneration) auditing.value = false
+  }
 }
 
 export const loadProject = load
@@ -209,6 +244,9 @@ export function useProject() {
     workspace,
     mismatches,
     recentProjects,
+    treeAudit,
+    auditing,
+    auditError,
     selectionQuery,
     isGlobal: computed(() => report.value?.project.scope === 'global'),
     project: computed(() => report.value?.project ?? null),
