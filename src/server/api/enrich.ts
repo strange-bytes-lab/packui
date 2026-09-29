@@ -1,4 +1,5 @@
 import { enrichReport } from '../core/enrich.ts'
+import { loadRegistryConfig } from '../core/npmrc.ts'
 import { detectGlobalScopes, listGlobalPackages } from '../core/global.ts'
 import { findScope, reportForScope } from './globals.ts'
 import { buildReport } from '../core/report.ts'
@@ -30,7 +31,11 @@ export function createEnrichHandler(access: ProjectAccess) {
         sendError(res, 403, 'Unknown project')
         return
       }
-      sendJson(res, 200, { rows: await enrichReport(report, controller.signal) })
+      // Globals have no project .npmrc; the user's own configuration still applies.
+      const config = await loadRegistryConfig(
+        report.project.scope === 'project' ? [report.project.path] : [],
+      )
+      sendJson(res, 200, { rows: await enrichReport(report, controller.signal, config) })
     } catch (error) {
       if (controller.signal.aborted) return
       sendError(res, 502, error instanceof Error ? error.message : 'Enrichment failed')

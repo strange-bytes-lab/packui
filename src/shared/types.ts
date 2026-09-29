@@ -38,7 +38,16 @@ export interface DependencyRow {
   alignment: AlignmentState
   deprecated: string | null
   vulnerabilities: VulnerabilitySummary | null
+  /**
+   * Whether `vulnerabilities: null` means anything. Absent until enrichment lands.
+   * 'unavailable': OSV could not be reached and nothing was cached.
+   * 'private': the package comes from a registry its scope is mapped to in .npmrc,
+   * which OSV cannot know about — so its name is never sent there either.
+   */
+  vulnerabilityCheck?: VulnerabilityCheck
 }
+
+export type VulnerabilityCheck = 'checked' | 'unavailable' | 'private'
 
 /**
  * A project has a manifest and a lockfile; a global scope has neither, only whatever

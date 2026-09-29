@@ -144,7 +144,10 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
           <div class="flags">
             <span v-if="props.pending" class="skeleton skeleton--flag" aria-hidden="true" />
             <template v-else>
-              <VulnerabilityBadge :vulnerabilities="row.vulnerabilities" />
+              <VulnerabilityBadge
+                :vulnerabilities="row.vulnerabilities"
+                :check="row.vulnerabilityCheck"
+              />
               <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
                 deprecated
               </span>

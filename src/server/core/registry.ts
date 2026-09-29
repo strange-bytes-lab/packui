@@ -1,15 +1,21 @@
 import semver from 'semver'
 import { isFresh, mapWithConcurrency, readCache, writeCache } from './cache.ts'
+import {
+  authorizationFor,
+  defaultRegistryConfig,
+  registryFor,
+  type RegistryConfig,
+} from './npmrc.ts'
 
 /**
- * Client for registry.npmjs.org.
+ * Client for the npm registry — registry.npmjs.org, or whichever registry `.npmrc`
+ * maps a package to (see core/npmrc.ts).
  *
  * The table only needs versions, dist-tags and deprecation, so it requests the
  * *abbreviated* packument — the full document runs to megabytes for popular
  * packages and carries READMEs we only want when a drawer opens.
  */
 
-const REGISTRY = process.env.PACKUI_REGISTRY ?? 'https://registry.npmjs.org'
 const ABBREVIATED = 'application/vnd.npm.install-v1+json'
 const TTL_MS = 60 * 60 * 1000 // one hour
 const CONCURRENCY = 8
@@ -27,8 +33,21 @@ interface AbbreviatedPackument {
 }
 
 /** Scoped names must be encoded, or `@scope/name` reads as an extra path segment. */
-function registryUrl(name: string): string {
-  return `${REGISTRY}/${name.replace('/', '%2F')}`
+function registryUrl(config: RegistryConfig, name: string): string {
+  return `${registryFor(config, name)}/${name.replace('/', '%2F')}`
+}
+
+/**
+ * Headers for one registry request. The credential, if any, is chosen by the URL
+ * itself, so a token configured for one registry cannot ride along to another.
+ */
+function requestHeaders(
+  config: RegistryConfig,
+  url: string,
+  extra: Record<string, string>,
+): Record<string, string> {
+  const authorization = authorizationFor(config, url)
+  return authorization === undefined ? extra : { ...extra, authorization }
 }
 
 function toPackageInfo(name: string, packument: AbbreviatedPackument): PackageInfo {
@@ -50,22 +69,26 @@ function toPackageInfo(name: string, packument: AbbreviatedPackument): PackageIn
 export async function fetchPackageInfo(
   name: string,
   signal?: AbortSignal,
+  config: RegistryConfig = defaultRegistryConfig(),
 ): Promise<PackageInfo | null> {
-  const cached = await readCache<AbbreviatedPackument>('registry', name)
+  const url = registryUrl(config, name)
+  // Keyed by URL, so the same name on a private registry never reads the public
+  // registry's entry. The key holds no credential; the header is not part of it.
+  const cached = await readCache<AbbreviatedPackument>('registry', url)
   if (isFresh(cached, TTL_MS) && cached !== null) return toPackageInfo(name, cached.value)
 
   try {
-    const response = await fetch(registryUrl(name), {
-      headers: {
+    const response = await fetch(url, {
+      headers: requestHeaders(config, url, {
         accept: ABBREVIATED,
         // A revalidation that has not changed costs a 304 and no body.
         ...(cached?.etag ? { 'if-none-match': cached.etag } : {}),
-      },
+      }),
       signal: signal ?? null,
     })
 
     if (response.status === 304 && cached !== null) {
-      await writeCache('registry', name, { ...cached, storedAt: Date.now() })
+      await writeCache('registry', url, { ...cached, storedAt: Date.now() })
       return toPackageInfo(name, cached.value)
     }
 
@@ -75,7 +98,7 @@ export async function fetchPackageInfo(
     }
 
     const packument = (await response.json()) as AbbreviatedPackument
-    await writeCache('registry', name, {
+    await writeCache('registry', url, {
       value: packument,
       etag: response.headers.get('etag'),
       storedAt: Date.now(),
@@ -91,9 +114,10 @@ export async function fetchPackageInfo(
 export async function fetchManyPackageInfos(
   names: readonly string[],
   signal?: AbortSignal,
+  config: RegistryConfig = defaultRegistryConfig(),
 ): Promise<Map<string, PackageInfo | null>> {
   const infos = await mapWithConcurrency(names, CONCURRENCY, (name) =>
-    fetchPackageInfo(name, signal),
+    fetchPackageInfo(name, signal, config),
   )
   return new Map(names.map((name, index) => [name, infos[index] ?? null]))
 }
@@ -116,18 +140,20 @@ export interface PackageDetail {
 export async function fetchPackageDetail(
   name: string,
   signal?: AbortSignal,
+  config: RegistryConfig = defaultRegistryConfig(),
 ): Promise<PackageDetail | null> {
-  const cached = await readCache<PackageDetail>('detail', name)
+  const url = `${registryUrl(config, name)}/latest`
+  const cached = await readCache<PackageDetail>('detail', url)
   if (isFresh(cached, TTL_MS) && cached !== null) return cached.value
 
   try {
-    const response = await fetch(`${registryUrl(name)}/latest`, {
-      headers: cached?.etag ? { 'if-none-match': cached.etag } : {},
+    const response = await fetch(url, {
+      headers: requestHeaders(config, url, cached?.etag ? { 'if-none-match': cached.etag } : {}),
       signal: signal ?? null,
     })
 
     if (response.status === 304 && cached !== null) {
-      await writeCache('detail', name, { ...cached, storedAt: Date.now() })
+      await writeCache('detail', url, { ...cached, storedAt: Date.now() })
       return cached.value
     }
 
@@ -154,7 +180,7 @@ export async function fetchPackageDetail(
       description: typeof version.description === 'string' ? version.description : null,
     }
 
-    await writeCache('detail', name, {
+    await writeCache('detail', url, {
       value: detail,
       etag: response.headers.get('etag'),
       storedAt: Date.now(),

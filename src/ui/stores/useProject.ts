@@ -9,6 +9,7 @@ interface EnrichedRow {
   deprecated: string | null
   outdated: DependencyReport['dependencies'][number]['outdated']
   vulnerabilities: DependencyReport['dependencies'][number]['vulnerabilities']
+  vulnerabilityCheck: DependencyReport['dependencies'][number]['vulnerabilityCheck']
 }
 
 export interface GlobalScopeSummary {
@@ -117,6 +118,7 @@ async function enrich(): Promise<void> {
         outdated: enriched.outdated,
         deprecated: enriched.deprecated,
         vulnerabilities: enriched.vulnerabilities,
+        vulnerabilityCheck: enriched.vulnerabilityCheck,
       }
     })
   } catch (cause) {

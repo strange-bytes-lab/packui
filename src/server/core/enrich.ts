@@ -1,6 +1,11 @@
-import type { DependencyReport, VulnerabilitySummary } from '../../shared/types.ts'
+import type {
+  DependencyReport,
+  VulnerabilityCheck,
+  VulnerabilitySummary,
+} from '../../shared/types.ts'
 import { mapWithConcurrency } from './cache.ts'
-import { fetchAdvisory, queryVulnerabilities, worstSeverity } from './osv.ts'
+import { defaultRegistryConfig, isPrivatelyScoped, type RegistryConfig } from './npmrc.ts'
+import { fetchAdvisory, queryVulnerabilitiesDetailed, worstSeverity } from './osv.ts'
 import { fetchManyPackageInfos } from './registry.ts'
 import { outdatedSeverity } from './report.ts'
 
@@ -11,6 +16,7 @@ export interface EnrichedRow {
   deprecated: string | null
   outdated: DependencyReport['dependencies'][number]['outdated']
   vulnerabilities: VulnerabilitySummary | null
+  vulnerabilityCheck: VulnerabilityCheck
 }
 
 /**
@@ -21,17 +27,20 @@ export interface EnrichedRow {
 export async function enrichReport(
   report: DependencyReport,
   signal?: AbortSignal,
+  config: RegistryConfig = defaultRegistryConfig(),
 ): Promise<EnrichedRow[]> {
   const names = report.dependencies.map((row) => row.name)
 
   const installedQueries = report.dependencies
     .filter((row): row is typeof row & { installed: string } => row.installed !== null)
+    .filter((row) => !isPrivatelyScoped(config, row.name))
     .map((row) => ({ name: row.name, version: row.installed }))
 
-  const [infos, advisoryIds] = await Promise.all([
-    fetchManyPackageInfos(names, signal),
-    queryVulnerabilities(installedQueries, signal),
+  const [infos, answer] = await Promise.all([
+    fetchManyPackageInfos(names, signal, config),
+    queryVulnerabilitiesDetailed(installedQueries, signal),
   ])
+  const advisoryIds = answer.ids
 
   // Severity lives on the advisory, not on the batch response, so it costs one
   // request per advisory. Only packages that actually have advisories pay it.
@@ -58,6 +67,11 @@ export async function enrichReport(
         ids.length === 0
           ? null
           : { count: ids.length, worst: severityByName.get(row.name) ?? null, ids },
+      vulnerabilityCheck: isPrivatelyScoped(config, row.name)
+        ? 'private'
+        : answer.unchecked.has(row.name)
+          ? 'unavailable'
+          : 'checked',
     }
   })
 }

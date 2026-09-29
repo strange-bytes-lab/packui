@@ -136,6 +136,9 @@ describe('registry client', () => {
 
     const { fetchPackageDetail } = await import('../src/server/core/registry.ts')
     await fetchPackageDetail('widget')
+    // Entries are keyed by the URL they came from, so a private registry's package of
+    // the same name never shares an entry with the public one.
+    const requested = stub.mock.calls[0]?.[0] as string
 
     const stored = JSON.parse(
       await readFile(
@@ -144,7 +147,7 @@ describe('registry client', () => {
           '.packui',
           'cache',
           'detail',
-          `${createHash('sha256').update('widget').digest('hex').slice(0, 32)}.json`,
+          `${createHash('sha256').update(requested).digest('hex').slice(0, 32)}.json`,
         ),
         'utf8',
       ),
@@ -196,6 +199,20 @@ describe('OSV client', () => {
     const { queryVulnerabilities } = await import('../src/server/core/osv.ts')
     const result = await queryVulnerabilities([{ name: 'risky-pkg', version: '0.1.0' }])
     expect(result.size).toBe(0)
+  })
+
+  it('says which packages went unchecked, so "none" is not mistaken for "clean"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down')
+      }),
+    )
+
+    const { queryVulnerabilitiesDetailed } = await import('../src/server/core/osv.ts')
+    const answer = await queryVulnerabilitiesDetailed([{ name: 'risky-pkg', version: '0.1.0' }])
+    expect(answer.ids.size).toBe(0)
+    expect([...answer.unchecked]).toEqual(['risky-pkg'])
   })
 
   it('caches per package version, so a second project pays for nothing it shares', async () => {

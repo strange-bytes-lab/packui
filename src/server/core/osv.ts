@@ -88,8 +88,27 @@ export async function queryVulnerabilities(
   queries: readonly OsvQuery[],
   signal?: AbortSignal,
 ): Promise<Map<string, string[]>> {
+  return (await queryVulnerabilitiesDetailed(queries, signal)).ids
+}
+
+export interface VulnerabilityAnswer {
+  /** Advisory ids per package name. Packages with none are absent. */
+  ids: Map<string, string[]>
+  /**
+   * Names that got no answer at all — OSV was unreachable and nothing was cached.
+   * Absence from `ids` means "no advisories" only for names not listed here.
+   */
+  unchecked: Set<string>
+}
+
+/** As queryVulnerabilities, but says which packages could not be checked at all. */
+export async function queryVulnerabilitiesDetailed(
+  queries: readonly OsvQuery[],
+  signal?: AbortSignal,
+): Promise<VulnerabilityAnswer> {
   const byName = new Map<string, string[]>()
-  if (queries.length === 0) return byName
+  const unchecked = new Set<string>()
+  if (queries.length === 0) return { ids: byName, unchecked }
 
   const entries = await Promise.all(
     queries.map(
@@ -106,12 +125,13 @@ export async function queryVulnerabilities(
       if (cached.value.length > 0) byName.set(query.name, cached.value)
       continue
     }
-    if (cached !== null && cached.value.length > 0) stale.set(query.name, cached.value)
+    if (cached !== null) stale.set(cacheKeyFor(query), cached.value)
     misses.push(query)
   }
 
-  if (misses.length === 0) return byName
+  if (misses.length === 0) return { ids: byName, unchecked }
 
+  const answered = new Set<string>()
   try {
     for (const batch of chunk(misses, BATCH_SIZE)) {
       const response = await fetch(`${OSV}/querybatch`, {
@@ -140,17 +160,23 @@ export async function queryVulnerabilities(
           etag: null,
           storedAt: Date.now(),
         })
+        answered.add(cacheKeyFor(query))
         if (ids.length > 0) byName.set(query.name, ids)
       }
     }
 
-    return byName
+    return { ids: byName, unchecked }
   } catch {
-    // Offline or OSV is down. Stale results beat inventing a clean bill of health.
-    for (const [name, ids] of stale) {
-      if (!byName.has(name)) byName.set(name, ids)
+    // Offline or OSV is down. Stale results beat inventing a clean bill of health, and
+    // a package with neither is reported as unchecked rather than as clean.
+    for (const query of misses) {
+      const key = cacheKeyFor(query)
+      if (answered.has(key)) continue
+      const fallback = stale.get(key)
+      if (fallback === undefined) unchecked.add(query.name)
+      else if (fallback.length > 0 && !byName.has(query.name)) byName.set(query.name, fallback)
     }
-    return byName
+    return { ids: byName, unchecked }
   }
 }
 
