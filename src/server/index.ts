@@ -9,6 +9,11 @@ import { pruneCache } from './core/cache.ts'
 import { listRecentProjects, recordRecentProject } from './core/recent.ts'
 import { toDisplayPath } from './core/report.ts'
 import { createMutateHandler, createRollbackHandler, createSnapshotsHandler } from './api/mutate.ts'
+import {
+  createChangelogHandler,
+  createCompatHandler,
+  createPackageHealthHandler,
+} from './api/insights.ts'
 import { createPackageHandler } from './api/package.ts'
 import { createAuditHandler, createWeightHandler } from './api/tree.ts'
 import { createUsageHandler } from './api/usage.ts'
@@ -75,6 +80,9 @@ function buildRouter(options: StartOptions, access: RefreshableAccess): Router {
   router.get('/api/audit', createAuditHandler(access))
   router.get('/api/weight', createWeightHandler(access))
   router.get('/api/usage', createUsageHandler(access))
+  router.get('/api/compat', createCompatHandler(access))
+  router.get('/api/changelog', createChangelogHandler(access))
+  router.get('/api/package-health', createPackageHealthHandler(access))
 
   // Global scopes are discovered from the package managers themselves rather than
   // supplied by the client, so they need no path allowlist.

@@ -17,6 +17,7 @@ export interface EnrichedRow {
   outdated: DependencyReport['dependencies'][number]['outdated']
   vulnerabilities: VulnerabilitySummary | null
   vulnerabilityCheck: VulnerabilityCheck
+  registryModified: string | null
 }
 
 /**
@@ -62,6 +63,7 @@ export async function enrichReport(
       latest: info?.latest ?? null,
       versions: info?.versions ?? [],
       deprecated: info?.deprecated ?? null,
+      registryModified: info?.modified ?? null,
       outdated: outdatedSeverity(row.installed, info?.latest ?? null),
       vulnerabilities:
         ids.length === 0

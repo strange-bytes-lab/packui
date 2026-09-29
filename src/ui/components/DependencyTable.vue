@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DependencyRow } from '@shared/types'
 import { computed } from 'vue'
+import { yearsSince } from '@/composables/format'
 import { fuzzyMatch, highlight, type Segment } from '@/composables/fuzzy'
 import type { SortDirection, SortKey } from '@/composables/sorting'
 import StatusDot from './StatusDot.vue'
@@ -18,6 +19,18 @@ const props = defineProps<{
   /** Per direct dependency: vulnerable packages it pulls in further down the tree. */
   indirect?: Record<string, { count: number; worst: string | null }> | null
 }>()
+
+/**
+ * Two years without any registry change. Not "abandoned" — some packages are simply
+ * done — but a package that will not get a security fix is worth knowing about.
+ */
+const QUIET_YEARS = 2
+
+function quietYears(row: DependencyRow): number | null {
+  if (row.deprecated) return null
+  const years = yearsSince(row.registryModified)
+  return years !== null && years >= QUIET_YEARS ? years : null
+}
 
 function indirectTitle(name: string): string {
   const entry = props.indirect?.[name]
@@ -164,6 +177,13 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
                 :title="indirectTitle(row.name)"
               >
                 {{ props.indirect[row.name]?.count }} indirect
+              </span>
+              <span
+                v-if="quietYears(row) !== null"
+                class="tag"
+                :title="`Nothing published or changed on the registry in ${quietYears(row)} years`"
+              >
+                quiet {{ quietYears(row) }}y
               </span>
               <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
                 deprecated
