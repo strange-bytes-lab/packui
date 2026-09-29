@@ -10,6 +10,8 @@ import { listRecentProjects, recordRecentProject } from './core/recent.ts'
 import { toDisplayPath } from './core/report.ts'
 import { createMutateHandler, createRollbackHandler, createSnapshotsHandler } from './api/mutate.ts'
 import { createPackageHandler } from './api/package.ts'
+import { createAuditHandler, createWeightHandler } from './api/tree.ts'
+import { createUsageHandler } from './api/usage.ts'
 import { createWorkspaceHandler } from './api/workspace.ts'
 import { Router, sendError, sendJson } from './router.ts'
 import { hasAllowedOrigin, hasValidToken, sessionToken } from './security.ts'
@@ -70,6 +72,9 @@ function buildRouter(options: StartOptions, access: RefreshableAccess): Router {
   router.get('/api/package', createPackageHandler(access))
   router.get('/api/snapshots', createSnapshotsHandler(access))
   router.get('/api/impact', createImpactHandler(access))
+  router.get('/api/audit', createAuditHandler(access))
+  router.get('/api/weight', createWeightHandler(access))
+  router.get('/api/usage', createUsageHandler(access))
 
   // Global scopes are discovered from the package managers themselves rather than
   // supplied by the client, so they need no path allowlist.

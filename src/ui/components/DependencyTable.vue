@@ -15,7 +15,16 @@ const props = defineProps<{
   query?: string
   sortKey?: SortKey | null
   sortDirection?: SortDirection
+  /** Per direct dependency: vulnerable packages it pulls in further down the tree. */
+  indirect?: Record<string, { count: number; worst: string | null }> | null
 }>()
+
+function indirectTitle(name: string): string {
+  const entry = props.indirect?.[name]
+  if (entry === undefined) return ''
+  const noun = entry.count === 1 ? 'package' : 'packages'
+  return `Pulls in ${entry.count} vulnerable ${noun}${entry.worst ? ` (worst: ${entry.worst})` : ''}. See Insights.`
+}
 const emit = defineEmits<{
   select: [name: string]
   upgrade: [row: DependencyRow]
@@ -148,6 +157,14 @@ const KIND_LABELS: Record<DependencyRow['kind'], string> = {
                 :vulnerabilities="row.vulnerabilities"
                 :check="row.vulnerabilityCheck"
               />
+              <span
+                v-if="props.indirect?.[row.name]"
+                class="tag"
+                :data-indirect="props.indirect[row.name]?.worst ?? 'unknown'"
+                :title="indirectTitle(row.name)"
+              >
+                {{ props.indirect[row.name]?.count }} indirect
+              </span>
               <span v-if="row.deprecated" class="tag tag--danger" :title="row.deprecated">
                 deprecated
               </span>
@@ -424,6 +441,17 @@ td {
   color: var(--danger);
   border-color: color-mix(in oklab, var(--danger) 35%, transparent);
   background: color-mix(in oklab, var(--danger) 10%, transparent);
+}
+
+.tag[data-indirect='critical'],
+.tag[data-indirect='high'] {
+  color: var(--major);
+  border-color: color-mix(in oklab, var(--major) 35%, transparent);
+}
+
+.tag[data-indirect='moderate'] {
+  color: var(--minor);
+  border-color: color-mix(in oklab, var(--minor) 35%, transparent);
 }
 
 .empty {
