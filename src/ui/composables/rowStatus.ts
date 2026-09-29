@@ -50,6 +50,10 @@ export function rowStatus(input: StatusInput): RowStatus {
     return { tone: 'minor', label: `Vulnerable — ${worst} severity advisory` }
   }
 
+  if (input.alignment === 'stale') {
+    return { tone: 'minor', label: 'The lockfile records a different range than package.json' }
+  }
+
   if (input.outdated === 'major') return { tone: 'major', label: 'Major version behind' }
   if (input.outdated === 'minor') return { tone: 'minor', label: 'Minor version behind' }
   if (input.outdated === 'patch') return { tone: 'patch', label: 'Patch version behind' }

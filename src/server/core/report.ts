@@ -9,7 +9,8 @@ import type {
 } from '../../shared/types.ts'
 import { detectPackageManager } from './detect.ts'
 import { readInstalledVersions } from './installed.ts'
-import { alignmentForDependency, isLockfileStale, worstAlignment } from './lockfile.ts'
+import { findLockfileDrift } from './lockdrift.ts'
+import { alignmentForDependency, worstAlignment } from './lockfile.ts'
 import { readManifest } from './manifest.ts'
 
 /** Collapses the home directory to `~` so long paths stay readable in the sidebar. */
@@ -69,8 +70,16 @@ export async function buildReport(projectPath: string): Promise<DependencyReport
     manifest.dependencies.map((dependency) => dependency.name),
   )
 
+  const drift = await findLockfileDrift(projectPath, detection.lockfile, '.', manifest.raw)
+  const drifted = new Set((drift ?? []).map((entry) => entry.name))
+
   const dependencies: DependencyRow[] = manifest.dependencies.map((dependency) => {
     const installedVersion = installed.get(dependency.name) ?? null
+    const alignment = alignmentForDependency(
+      dependency.range,
+      installedVersion,
+      detection.hasNodeModules,
+    )
     return {
       name: dependency.name,
       kind: dependency.kind,
@@ -78,18 +87,16 @@ export async function buildReport(projectPath: string): Promise<DependencyReport
       installed: installedVersion,
       latest: null,
       outdated: 'unknown',
-      alignment: alignmentForDependency(
-        dependency.range,
-        installedVersion,
-        detection.hasNodeModules,
-      ),
+      // Installed-state problems outrank drift: they are what breaks first.
+      alignment: alignment === 'aligned' && drifted.has(dependency.name) ? 'stale' : alignment,
       deprecated: null,
       vulnerabilities: null,
     }
   })
 
   const states: AlignmentState[] = dependencies.map((row) => row.alignment)
-  if (await isLockfileStale(projectPath, detection.lockfile)) states.push('stale')
+  // A dependency removed from package.json but still locked has no row to carry it.
+  if (drift !== null && drift.length > 0) states.push('stale')
 
   return {
     project: {
@@ -102,6 +109,7 @@ export async function buildReport(projectPath: string): Promise<DependencyReport
       hasNodeModules: detection.hasNodeModules,
     },
     dependencies,
+    drift,
     alignment: worstAlignment(states),
     generatedAt: new Date().toISOString(),
   }
