@@ -15,7 +15,7 @@ import { alignmentForDependency, worstAlignment } from './lockfile.ts'
 import { readManifest } from './manifest.ts'
 
 /** Collapses the home directory to `~` so long paths stay readable in the sidebar. */
-function toDisplayPath(path: string): string {
+export function toDisplayPath(path: string): string {
   const home = homedir()
   return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path
 }

@@ -67,7 +67,7 @@ if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535))
   process.exit(1)
 }
 
-const server = await startServer({ projectPath, port })
+const server = await startServer({ projectPath, port, rememberProjects: true })
 
 console.log(`\n  packui  ${server.url}`)
 console.log(`  project ${projectPath}\n`)

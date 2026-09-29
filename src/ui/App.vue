@@ -12,6 +12,7 @@ import { requestMutation, type BatchPackage } from '@/composables/useMutation'
 import {
   load,
   loadGlobalScopes,
+  loadRecentProjects,
   loadWorkspace,
   useProject,
   type Selection,
@@ -31,6 +32,7 @@ const {
   dependencies,
   workspace,
   mismatches,
+  recentProjects,
 } = useProject()
 const { query, kind, problemsOnly, sortKey, sortDirection, toggleSort, filtered } =
   useFilters(dependencies)
@@ -131,17 +133,23 @@ function upgradeToVersion(name: string, version: string): void {
 /** A change can alter ranges across the workspace, not only the table being shown. */
 function onMutationFinished(): void {
   void load()
-  if (workspace.value !== null) void loadWorkspace()
+  if (workspace.value !== null) void loadWorkspace(report.value?.project.path)
 }
 
-function select(target: Selection): void {
-  void load(target)
+async function select(target: Selection): Promise<void> {
+  await load(target)
+  // Switching to a recent project that is not part of the current workspace brings
+  // its own workspace (or none) into the sidebar.
+  if (target.kind !== 'project' || report.value?.project.scope !== 'project') return
+  const root = report.value.project.workspace?.root ?? null
+  if (root !== (workspace.value?.root ?? null)) await loadWorkspace(report.value.project.path)
 }
 
 onMounted(() => {
   void load({ kind: 'project' })
   void loadGlobalScopes()
   void loadWorkspace()
+  void loadRecentProjects()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -155,6 +163,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       :scopes="globalScopes"
       :selection="selection"
       :workspace="workspace"
+      :recent="recentProjects"
       @select="select"
     />
 
