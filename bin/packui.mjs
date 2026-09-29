@@ -17,11 +17,21 @@ const HELP = `
     --help            Show this message
 `
 
+/**
+ * `start` is a cmd.exe builtin, so it needs a shell, and cmd.exe would read an `&` in
+ * the URL as a command separator. rundll32's URL handler opens the default browser
+ * with the URL as a plain argument, no shell involved.
+ */
+function browserCommand(url) {
+  if (process.platform === 'darwin') return ['open', [url]]
+  if (process.platform === 'win32') return ['rundll32', ['url.dll,FileProtocolHandler', url]]
+  return ['xdg-open', [url]]
+}
+
 function openBrowser(url) {
-  const command =
-    process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
+  const [command, args] = browserCommand(url)
   // Detached so closing the browser never takes the server with it.
-  spawn(command, [url], { stdio: 'ignore', detached: true, shell: process.platform === 'win32' })
+  spawn(command, args, { stdio: 'ignore', detached: true, shell: false })
     .on('error', () => {
       console.log('  Could not open a browser automatically. Open the URL above manually.')
     })

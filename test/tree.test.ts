@@ -5,20 +5,20 @@ import { join } from 'node:path'
 import { buildInstallGraph, directDependentsOf, shortestChains } from '../src/server/core/tree.ts'
 import { suggestFix } from '../src/server/core/audit.ts'
 import { measureWeight } from '../src/server/core/weight.ts'
+import { DIR_LINK, restoreHome, setHome } from './helpers/home.ts'
 
 let dir: string
 let home: string
-const originalHome = process.env.HOME
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'packui-tree-'))
   home = await mkdtemp(join(tmpdir(), 'packui-tree-home-'))
-  process.env.HOME = home
+  setHome(home)
   vi.resetModules()
 })
 
 afterEach(async () => {
-  process.env.HOME = originalHome
+  restoreHome()
   vi.unstubAllGlobals()
   await rm(dir, { recursive: true, force: true })
   await rm(home, { recursive: true, force: true })
@@ -61,8 +61,8 @@ async function pnpmLayout(): Promise<void> {
   await pkg(appLib, 'app-lib', '1.0.0', { leaf: '^1.0.0' })
   const leaf = join(store, 'leaf@1.0.0', 'node_modules', 'leaf')
   await pkg(leaf, 'leaf', '1.0.0')
-  await symlink(leaf, join(store, 'app-lib@1.0.0', 'node_modules', 'leaf'), 'dir')
-  await symlink(appLib, join(modules, 'app-lib'), 'dir')
+  await symlink(leaf, join(store, 'app-lib@1.0.0', 'node_modules', 'leaf'), DIR_LINK)
+  await symlink(appLib, join(modules, 'app-lib'), DIR_LINK)
 }
 
 describe('install graph', () => {

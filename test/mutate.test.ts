@@ -10,6 +10,7 @@ import {
 } from '../src/server/core/commands.ts'
 import { runCommand, withProjectLock } from '../src/server/core/exec.ts'
 import type { PackageManager } from '../src/shared/types.ts'
+import { restoreHome, setHome } from './helpers/home.ts'
 
 describe('command construction', () => {
   it.each([
@@ -243,16 +244,15 @@ describe('project lock', () => {
 describe('snapshots', () => {
   let home: string
   let projectPath: string
-  const originalHome = process.env.HOME
 
   beforeEach(async () => {
     home = await mkdtemp(join(tmpdir(), 'packui-home-'))
     projectPath = await mkdtemp(join(tmpdir(), 'packui-proj-'))
-    process.env.HOME = home
+    setHome(home)
   })
 
   afterEach(async () => {
-    process.env.HOME = originalHome
+    restoreHome()
     await rm(home, { recursive: true, force: true })
     await rm(projectPath, { recursive: true, force: true })
   })

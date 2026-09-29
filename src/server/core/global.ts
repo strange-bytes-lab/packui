@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { isDirectoryLike, listDirectoryNames } from './fsutil.ts'
+import { toInvocation } from './spawnable.ts'
 import type { DependencyRow, PackageManager } from '../../shared/types.ts'
 
 /**
@@ -87,10 +88,12 @@ async function askForRoot(
   args: string[],
 ): Promise<string | null> {
   try {
-    const { stdout } = await run(command, args, {
+    const invocation = toInvocation(command, args)
+    const { stdout } = await run(invocation.file, invocation.args, {
       timeout: 10_000,
       // Never a shell: there is no user input here and no reason to involve one.
       shell: false,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments ?? false,
       env: { ...process.env, NO_COLOR: '1' },
     })
 
@@ -117,27 +120,55 @@ async function askForRoot(
  * volta
  * ------------------------------------------------------------------ */
 
+const isWindows = process.platform === 'win32'
+
+/** Where volta lives: VOLTA_HOME, else ~/.volta, or %LOCALAPPDATA%\Volta on Windows. */
+function voltaHome(): string {
+  if (process.env.VOLTA_HOME) return process.env.VOLTA_HOME
+  if (isWindows && process.env.LOCALAPPDATA) return join(process.env.LOCALAPPDATA, 'Volta')
+  return join(homedir(), '.volta')
+}
+
+/**
+ * npm's global layout puts packages in `<prefix>/lib/node_modules` on POSIX but
+ * `<prefix>/node_modules` on Windows, and volta and every per-version layout inherit
+ * that. Probing both costs one stat and means neither platform is guessed wrong.
+ */
+const GLOBAL_SUFFIXES: ReadonlyArray<readonly string[]> = [
+  ['lib', 'node_modules'],
+  ['node_modules'],
+]
+
+async function firstDirectory(base: string): Promise<string | null> {
+  for (const suffix of GLOBAL_SUFFIXES) {
+    const path = join(base, ...suffix)
+    if (await isDirectory(path)) return path
+  }
+  return null
+}
+
 /**
  * volta installs each tool into its own isolated tree:
  *   ~/.volta/tools/image/packages/<tool>/lib/node_modules/<tool>
  *   ~/.volta/tools/image/packages/@scope/<tool>/lib/node_modules/@scope/<tool>
+ * (without the `lib` on Windows).
  */
 async function voltaPackageRoots(): Promise<GlobalRoot[]> {
-  const packagesDir = join(homedir(), '.volta', 'tools', 'image', 'packages')
+  const packagesDir = join(voltaHome(), 'tools', 'image', 'packages')
   const roots: GlobalRoot[] = []
 
   for (const entry of await listDirectories(packagesDir)) {
     if (entry.startsWith('@')) {
       for (const scoped of await listDirectories(join(packagesDir, entry))) {
-        const path = join(packagesDir, entry, scoped, 'lib', 'node_modules')
+        const path = await firstDirectory(join(packagesDir, entry, scoped))
         // The directory owning the tree names the tool; everything else in there is
         // one of its dependencies.
-        if (await isDirectory(path)) roots.push({ path, only: `${entry}/${scoped}` })
+        if (path !== null) roots.push({ path, only: `${entry}/${scoped}` })
       }
       continue
     }
-    const path = join(packagesDir, entry, 'lib', 'node_modules')
-    if (await isDirectory(path)) roots.push({ path, only: entry })
+    const path = await firstDirectory(join(packagesDir, entry))
+    if (path !== null) roots.push({ path, only: entry })
   }
 
   return roots
@@ -145,7 +176,7 @@ async function voltaPackageRoots(): Promise<GlobalRoot[]> {
 
 async function voltaActiveNodeVersion(): Promise<string | null> {
   try {
-    const raw = await readFile(join(homedir(), '.volta', 'tools', 'user', 'platform.json'), 'utf8')
+    const raw = await readFile(join(voltaHome(), 'tools', 'user', 'platform.json'), 'utf8')
     const parsed = JSON.parse(raw) as { node?: { runtime?: unknown } }
     return typeof parsed.node?.runtime === 'string' ? parsed.node.runtime : null
   } catch {
@@ -165,46 +196,82 @@ interface VersionedLayout {
   suffix: string[]
 }
 
-const VERSIONED_LAYOUTS: VersionedLayout[] = [
-  {
-    installer: 'npm',
-    manager: 'nvm',
-    base: join(homedir(), '.nvm', 'versions', 'node'),
-    suffix: ['lib', 'node_modules'],
-  },
-  {
-    installer: 'npm',
-    manager: 'volta',
-    base: join(homedir(), '.volta', 'tools', 'image', 'node'),
-    suffix: ['lib', 'node_modules'],
-  },
-  {
-    installer: 'npm',
-    manager: 'asdf',
-    base: join(homedir(), '.asdf', 'installs', 'nodejs'),
-    suffix: ['lib', 'node_modules'],
-  },
-  {
-    installer: 'npm',
-    manager: 'fnm',
-    base: join(homedir(), '.local', 'share', 'fnm', 'node-versions'),
-    suffix: ['installation', 'lib', 'node_modules'],
-  },
-  {
-    installer: 'npm',
-    manager: 'fnm',
-    base: join(homedir(), 'Library', 'Application Support', 'fnm', 'node-versions'),
-    suffix: ['installation', 'lib', 'node_modules'],
-  },
-]
+function versionedLayouts(): VersionedLayout[] {
+  if (isWindows) {
+    const appData = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+    return [
+      // nvm-windows keeps each version beside its own node.exe, with no `lib`.
+      {
+        installer: 'npm',
+        manager: 'nvm',
+        base: process.env.NVM_HOME ?? join(appData, 'nvm'),
+        suffix: ['node_modules'],
+      },
+      {
+        installer: 'npm',
+        manager: 'volta',
+        base: join(voltaHome(), 'tools', 'image', 'node'),
+        suffix: ['node_modules'],
+      },
+      {
+        installer: 'npm',
+        manager: 'fnm',
+        base: join(process.env.FNM_DIR ?? join(appData, 'fnm'), 'node-versions'),
+        suffix: ['installation', 'node_modules'],
+      },
+    ]
+  }
 
-/** Fixed locations used by n, Homebrew and system installs. */
-const FIXED_ROOTS: ReadonlyArray<readonly [string, string]> = [
-  ['n', join(homedir(), 'n', 'lib', 'node_modules')],
-  ['homebrew', '/opt/homebrew/lib/node_modules'],
-  ['system', '/usr/local/lib/node_modules'],
-  ['system', '/usr/lib/node_modules'],
-]
+  return [
+    {
+      installer: 'npm',
+      manager: 'nvm',
+      base: join(process.env.NVM_DIR ?? join(homedir(), '.nvm'), 'versions', 'node'),
+      suffix: ['lib', 'node_modules'],
+    },
+    {
+      installer: 'npm',
+      manager: 'volta',
+      base: join(voltaHome(), 'tools', 'image', 'node'),
+      suffix: ['lib', 'node_modules'],
+    },
+    {
+      installer: 'npm',
+      manager: 'asdf',
+      base: join(homedir(), '.asdf', 'installs', 'nodejs'),
+      suffix: ['lib', 'node_modules'],
+    },
+    {
+      installer: 'npm',
+      manager: 'fnm',
+      base: join(process.env.FNM_DIR ?? join(homedir(), '.local', 'share', 'fnm'), 'node-versions'),
+      suffix: ['installation', 'lib', 'node_modules'],
+    },
+    {
+      installer: 'npm',
+      manager: 'fnm',
+      base: join(homedir(), 'Library', 'Application Support', 'fnm', 'node-versions'),
+      suffix: ['installation', 'lib', 'node_modules'],
+    },
+  ]
+}
+
+/** Fixed locations used by n, Homebrew and system installs — or npm's defaults on Windows. */
+function fixedRoots(): ReadonlyArray<readonly [string, string]> {
+  if (isWindows) {
+    const appData = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+    return [
+      ['npm', join(appData, 'npm', 'node_modules')],
+      ['system', join(process.env.ProgramFiles ?? 'C:\\Program Files', 'nodejs', 'node_modules')],
+    ]
+  }
+  return [
+    ['n', join(homedir(), 'n', 'lib', 'node_modules')],
+    ['homebrew', '/opt/homebrew/lib/node_modules'],
+    ['system', '/usr/local/lib/node_modules'],
+    ['system', '/usr/lib/node_modules'],
+  ]
+}
 
 /* ------------------------------------------------------------------ *
  * Assembly
@@ -264,7 +331,7 @@ export async function detectGlobalScopes(): Promise<GlobalScope[]> {
 
   // 4. Every other installed Node version, so globals stranded on a version you
   //    have switched away from are visible rather than silently missing.
-  for (const layout of VERSIONED_LAYOUTS) {
+  for (const layout of versionedLayouts()) {
     for (const version of await listDirectories(layout.base)) {
       const root = join(layout.base, version, ...layout.suffix)
       if (!(await isDirectory(root))) continue
@@ -283,7 +350,7 @@ export async function detectGlobalScopes(): Promise<GlobalScope[]> {
   }
 
   // 5. Fixed system locations.
-  for (const [manager, root] of FIXED_ROOTS) {
+  for (const [manager, root] of fixedRoots()) {
     if (!(await isDirectory(root))) continue
     scopes.push({
       id: `${manager}:${root}`,

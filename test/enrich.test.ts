@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { restoreHome, setHome } from './helpers/home.ts'
 
 /**
  * These run against a stubbed fetch rather than the live registry, so the suite
@@ -10,16 +11,15 @@ import { join } from 'node:path'
  * tests never read or pollute the developer's real ~/.packui.
  */
 let cacheHome: string
-const originalHome = process.env.HOME
 
 beforeEach(async () => {
   cacheHome = await mkdtemp(join(tmpdir(), 'packui-test-'))
-  process.env.HOME = cacheHome
+  setHome(cacheHome)
   vi.resetModules()
 })
 
 afterEach(async () => {
-  process.env.HOME = originalHome
+  restoreHome()
   vi.unstubAllGlobals()
   await rm(cacheHome, { recursive: true, force: true })
 })

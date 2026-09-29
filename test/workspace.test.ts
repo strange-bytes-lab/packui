@@ -16,6 +16,7 @@ import {
 import { startServer, type RunningServer } from '../src/server/index.ts'
 import { sessionToken } from '../src/server/security.ts'
 import type { DependencyReport } from '../src/shared/types.ts'
+import { restoreHome, setHome } from './helpers/home.ts'
 
 const root = fileURLToPath(new URL('./fixtures/workspace-project', import.meta.url))
 const app = join(root, 'packages', 'app')
@@ -172,17 +173,16 @@ describe('workspace commands', () => {
 describe('workspace snapshots', () => {
   let home: string
   let ws: string
-  const originalHome = process.env.HOME
 
   beforeEach(async () => {
     home = await mkdtemp(join(tmpdir(), 'packui-home-'))
     ws = await mkdtemp(join(tmpdir(), 'packui-ws-'))
-    process.env.HOME = home
+    setHome(home)
     vi.resetModules()
   })
 
   afterEach(async () => {
-    process.env.HOME = originalHome
+    restoreHome()
     await rm(home, { recursive: true, force: true })
     await rm(ws, { recursive: true, force: true })
   })
