@@ -23,10 +23,14 @@ const relevant = computed(() =>
 
 const summary = computed(() => {
   const count = relevant.value.length
-  const noun = count === 1 ? 'dependency is' : 'dependencies are'
-  return props.relative === '.'
-    ? `${count} ${noun} declared with different ranges across workspace packages.`
-    : `${count} of this package's ${noun} declared differently elsewhere in the workspace.`
+  if (props.relative === '.') {
+    return count === 1
+      ? '1 dependency is declared with different ranges across workspace packages.'
+      : `${count} dependencies are declared with different ranges across workspace packages.`
+  }
+  return count === 1
+    ? "1 of this package's dependencies is declared differently elsewhere in the workspace."
+    : `${count} of this package's dependencies are declared differently elsewhere in the workspace.`
 })
 </script>
 
