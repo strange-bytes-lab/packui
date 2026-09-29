@@ -8,6 +8,7 @@ import PackageDrawer from '@/components/PackageDrawer.vue'
 import RangeMismatches from '@/components/RangeMismatches.vue'
 import RemoveDialog from '@/components/RemoveDialog.vue'
 import Sidebar from '@/components/Sidebar.vue'
+import { buildReportHtml, downloadReport } from '@/composables/exportReport'
 import { useFilters } from '@/composables/useFilters'
 import { requestMutation, type BatchPackage } from '@/composables/useMutation'
 import {
@@ -40,6 +41,20 @@ const {
 } = useProject()
 
 const insightsTab = ref<InsightsTab | null>(null)
+
+/**
+ * Exports what is on screen — the filtered, sorted rows — so the file matches what the
+ * person chose to share, not a different view of it.
+ */
+function exportReport(): void {
+  if (report.value === null) return
+  const html = buildReportHtml(
+    report.value,
+    filtered.value,
+    isGlobal.value ? null : treeAudit.value,
+  )
+  downloadReport(html, report.value.project.name)
+}
 
 /** Opening a package from the insights dialog lands on the same drawer as the table. */
 function selectFromInsights(name: string): void {
@@ -234,6 +249,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               @click="insightsTab = 'advisories'"
             >
               Insights
+            </button>
+            <button
+              v-if="report !== null"
+              type="button"
+              :disabled="enriching"
+              title="Download the rows shown as a self-contained HTML file"
+              @click="exportReport"
+            >
+              Export
             </button>
             <button type="button" :disabled="loading" @click="load()">
               {{ loading ? 'Refreshing…' : 'Refresh' }}
