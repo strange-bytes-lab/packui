@@ -37,6 +37,12 @@ export interface RangeMismatch {
   declarations: { package: string; relative: string; range: string; field: string }[]
 }
 
+export interface RecentProjectSummary {
+  path: string
+  displayPath: string
+  name: string
+}
+
 export interface WorkspaceSummary {
   root: string
   packages: WorkspacePackageSummary[]
@@ -51,6 +57,7 @@ const error = ref<string | null>(null)
 const enrichError = ref<string | null>(null)
 const workspace = ref<WorkspaceSummary | null>(null)
 const mismatches = ref<RangeMismatch[]>([])
+const recentProjects = ref<RecentProjectSummary[]>([])
 
 /**
  * Enrichment is slow and the sidebar is fast, so a response can arrive after the user
@@ -79,13 +86,24 @@ export function withSelection(path: string): string {
   return path.includes('?') ? `${path}&${query.slice(1)}` : `${path}${query}`
 }
 
-/** The workspace the launched project belongs to, for the sidebar. */
-export async function loadWorkspace(): Promise<void> {
+/** Projects packui was launched against before, for switching without a restart. */
+export async function loadRecentProjects(): Promise<void> {
   try {
+    const body = await apiFetch<{ recent: RecentProjectSummary[] }>('/projects')
+    recentProjects.value = body.recent
+  } catch {
+    recentProjects.value = []
+  }
+}
+
+/** The workspace the shown project belongs to (the launched one by default). */
+export async function loadWorkspace(path?: string): Promise<void> {
+  try {
+    const query = path === undefined ? '' : `?path=${encodeURIComponent(path)}`
     const body = await apiFetch<{
       workspace: WorkspaceSummary | null
       mismatches: RangeMismatch[]
-    }>('/workspace')
+    }>(`/workspace${query}`)
     workspace.value = body.workspace
     mismatches.value = body.mismatches
   } catch {
@@ -190,6 +208,7 @@ export function useProject() {
     enrichError,
     workspace,
     mismatches,
+    recentProjects,
     selectionQuery,
     isGlobal: computed(() => report.value?.project.scope === 'global'),
     project: computed(() => report.value?.project ?? null),

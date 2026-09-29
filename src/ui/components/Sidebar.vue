@@ -1,14 +1,28 @@
 <script setup lang="ts">
 import type { ProjectSummary } from '@shared/types'
 import { useTheme } from '@/composables/useTheme'
-import type { GlobalScopeSummary, Selection, WorkspaceSummary } from '@/stores/useProject'
+import { computed } from 'vue'
+import type {
+  GlobalScopeSummary,
+  RecentProjectSummary,
+  Selection,
+  WorkspaceSummary,
+} from '@/stores/useProject'
 
 const props = defineProps<{
   project: ProjectSummary | null
   scopes: readonly GlobalScopeSummary[]
   selection: Selection
   workspace?: WorkspaceSummary | null
+  recent?: readonly RecentProjectSummary[]
 }>()
+
+/** Recent projects not already listed above, as the workspace or the project entry. */
+const otherRecent = computed(() => {
+  const listed = new Set(props.workspace?.packages.map((member) => member.path) ?? [])
+  if (props.project?.scope === 'project') listed.add(props.project.path)
+  return (props.recent ?? []).filter((entry) => !listed.has(entry.path))
+})
 
 /** The package the table shows, when it shows one — matched by path, not by name. */
 function isCurrent(path: string): boolean {
@@ -69,6 +83,23 @@ function scopeHint(scope: GlobalScopeSummary): string {
               {{ project.packageManager }}
             </span>
           </button>
+        </li>
+      </ul>
+    </nav>
+
+    <nav v-if="otherRecent.length > 0" class="section">
+      <span class="section-label">Recent</span>
+      <ul class="list">
+        <li v-for="entry in otherRecent" :key="entry.path">
+          <button
+            type="button"
+            class="entry"
+            :title="entry.path"
+            @click="emit('select', { kind: 'project', path: entry.path })"
+          >
+            <span class="entry-name">{{ entry.name }}</span>
+          </button>
+          <span class="entry-hint">{{ entry.displayPath }}</span>
         </li>
       </ul>
     </nav>

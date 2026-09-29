@@ -6,6 +6,8 @@ import { createEnrichHandler } from './api/enrich.ts'
 import { globalDepsHandler, globalScopesHandler } from './api/globals.ts'
 import { createImpactHandler } from './api/impact.ts'
 import { pruneCache } from './core/cache.ts'
+import { listRecentProjects, recordRecentProject } from './core/recent.ts'
+import { toDisplayPath } from './core/report.ts'
 import { createMutateHandler, createRollbackHandler, createSnapshotsHandler } from './api/mutate.ts'
 import { createPackageHandler } from './api/package.ts'
 import { createWorkspaceHandler } from './api/workspace.ts'
@@ -28,6 +30,12 @@ export interface StartOptions {
   projectPath: string
   /** Preferred port. Defaults to DEFAULT_PORT; 0 lets the OS pick any free one. */
   port?: number
+  /**
+   * Record this project in ~/.packui/recent.json and allow switching to the ones
+   * recorded before. The CLI turns this on; tests and embedders leave it off so they
+   * neither write to nor trust the user's history.
+   */
+  rememberProjects?: boolean
 }
 
 export interface RunningServer {
@@ -46,6 +54,17 @@ function buildRouter(options: StartOptions, access: RefreshableAccess): Router {
   })
 
   router.get('/api/workspace', createWorkspaceHandler(access))
+
+  router.get('/api/projects', async ({ res }) => {
+    const recent = options.rememberProjects === true ? await listRecentProjects() : []
+    await access.refresh()
+    const allowed = new Set(access.allowedProjects())
+    sendJson(res, 200, {
+      recent: recent
+        .filter((entry) => allowed.has(entry.path))
+        .map((entry) => ({ ...entry, displayPath: toDisplayPath(entry.path) })),
+    })
+  })
   router.get('/api/deps', createDepsHandler(access))
   router.get('/api/enrich', createEnrichHandler(access))
   router.get('/api/package', createPackageHandler(access))
@@ -70,7 +89,12 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
   // little disk IO costs the user nothing. Not awaited: it must never delay the UI.
   void pruneCache()
 
-  const access = createProjectAccess(options.projectPath)
+  if (options.rememberProjects === true) await recordRecentProject(options.projectPath)
+  const access = createProjectAccess(options.projectPath, async () =>
+    options.rememberProjects === true
+      ? (await listRecentProjects()).map((entry) => entry.path)
+      : [],
+  )
   await access.refresh()
   const router = buildRouter(options, access)
 
