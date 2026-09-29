@@ -25,11 +25,18 @@ export interface PackageInfo {
   latest: string | null
   versions: string[]
   deprecated: string | null
+  /**
+   * When the packument last changed. Publishing, deprecating and retagging all move
+   * it, so it is an upper bound on how long a package has gone without a release —
+   * if it is three years old, nothing has been published in three years.
+   */
+  modified: string | null
 }
 
 interface AbbreviatedPackument {
   'dist-tags'?: Record<string, string>
   versions?: Record<string, { deprecated?: unknown }>
+  modified?: unknown
 }
 
 /** Scoped names must be encoded, or `@scope/name` reads as an extra path segment. */
@@ -63,7 +70,13 @@ function toPackageInfo(name: string, packument: AbbreviatedPackument): PackageIn
       ? latestEntry.deprecated
       : null
 
-  return { name, latest, versions: semver.rsort(versions), deprecated }
+  return {
+    name,
+    latest,
+    versions: semver.rsort(versions),
+    deprecated,
+    modified: typeof packument.modified === 'string' ? packument.modified : null,
+  }
 }
 
 export async function fetchPackageInfo(
@@ -186,6 +199,86 @@ export async function fetchPackageDetail(
       storedAt: Date.now(),
     })
     return detail
+  } catch {
+    return cached?.value ?? null
+  }
+}
+
+/**
+ * The fields of one version's manifest that decide whether upgrading to it is safe,
+ * and where its changelog lives. From `/<pkg>/<version>` — a few kilobytes, where the
+ * full packument would be megabytes.
+ */
+export interface VersionManifest {
+  version: string
+  engines: Record<string, string>
+  peerDependencies: Record<string, string>
+  /** Peer names marked `optional` in peerDependenciesMeta. */
+  optionalPeers: string[]
+  repository: string | null
+  /** `repository.directory`: where a monorepo keeps this package. */
+  repositoryDirectory: string | null
+  deprecated: string | null
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null) return {}
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  )
+}
+
+/** A published version never changes, so its manifest can be cached for a long time. */
+const VERSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+export async function fetchVersionManifest(
+  name: string,
+  version: string,
+  signal?: AbortSignal,
+  config: RegistryConfig = defaultRegistryConfig(),
+): Promise<VersionManifest | null> {
+  const url = `${registryUrl(config, name)}/${encodeURIComponent(version)}`
+  const cached = await readCache<VersionManifest>('version', url)
+  if (isFresh(cached, VERSION_TTL_MS) && cached !== null) return cached.value
+
+  try {
+    const response = await fetch(url, {
+      headers: requestHeaders(config, url, {}),
+      signal: signal ?? null,
+    })
+    if (!response.ok) return cached?.value ?? null
+
+    const document = (await response.json()) as Record<string, unknown>
+    const repository = document.repository as
+      { url?: unknown; directory?: unknown } | string | undefined
+    const meta = (document.peerDependenciesMeta ?? {}) as Record<string, { optional?: unknown }>
+
+    const manifest: VersionManifest = {
+      version: typeof document.version === 'string' ? document.version : version,
+      engines: stringRecord(document.engines),
+      peerDependencies: stringRecord(document.peerDependencies),
+      optionalPeers: Object.entries(meta)
+        .filter(([, entry]) => entry?.optional === true)
+        .map(([peer]) => peer),
+      repository:
+        typeof repository === 'string'
+          ? repository
+          : typeof repository?.url === 'string'
+            ? repository.url
+            : null,
+      repositoryDirectory:
+        typeof repository === 'object' && typeof repository.directory === 'string'
+          ? repository.directory
+          : null,
+      deprecated:
+        typeof document.deprecated === 'string' && document.deprecated !== ''
+          ? document.deprecated
+          : null,
+    }
+    await writeCache('version', url, { value: manifest, etag: null, storedAt: Date.now() })
+    return manifest
   } catch {
     return cached?.value ?? null
   }

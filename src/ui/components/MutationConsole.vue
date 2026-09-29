@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { cancelMutation, confirmMutation, rollback, useMutation } from '@/composables/useMutation'
+import CompatSummary from './CompatSummary.vue'
 
 const emit = defineEmits<{ finished: [] }>()
 
@@ -24,6 +25,16 @@ const preview = computed(() => {
 })
 
 const busy = computed(() => phase.value === 'running')
+
+/** A single upgrade to an exact version is checked before it runs. Batches are not. */
+const compatTarget = computed(() => {
+  const mutation = pending.value
+  if (mutation?.action !== 'upgrade' || mutation.name === undefined) return null
+  const version = mutation.version
+  return version !== undefined && /^\d+\.\d+\.\d+/.test(version)
+    ? { name: mutation.name, version }
+    : null
+})
 
 watch(phase, async (value) => {
   if (value === 'idle') {
@@ -57,6 +68,13 @@ function close(): void {
       </h2>
 
       <pre class="command">{{ preview }}</pre>
+
+      <CompatSummary
+        v-if="phase === 'confirming' && compatTarget"
+        class="compat"
+        :name="compatTarget.name"
+        :version="compatTarget.version"
+      />
 
       <p v-if="phase === 'confirming'" class="note">
         packui runs your project's own package manager, so it stays in charge of the lockfile.
@@ -112,6 +130,10 @@ function close(): void {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
+}
+
+.compat {
+  margin-block-end: var(--space-3);
 }
 
 .console::backdrop {

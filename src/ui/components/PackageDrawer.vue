@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { apiFetch } from '@/composables/useApi'
+import { formatAge, formatCount, yearsSince } from '@/composables/format'
 import { renderMarkdown } from '@/composables/markdown'
 import { withSelection } from '@/stores/useProject'
-import type { AdvisoryDetail, PackageDrawerPayload } from '@/types/drawer'
+import CompatSummary from './CompatSummary.vue'
+import type {
+  AdvisoryDetail,
+  ChangelogPayload,
+  PackageDrawerPayload,
+  PackageHealth,
+} from '@/types/drawer'
 
 const props = defineProps<{ packageName: string | null }>()
 const emit = defineEmits<{ close: []; upgrade: [name: string, version: string] }>()
@@ -35,10 +42,74 @@ const upgradeCandidates = computed(() => {
   return all.slice(0, 40)
 })
 
+const health = ref<PackageHealth | null>(null)
+const changelog = ref<ChangelogPayload | null>(null)
+const changelogLoading = ref(false)
+
+/** The version an upgrade from here would go to, when there is one. */
+const upgradeTarget = computed(() => {
+  const current = payload.value
+  if (current === null || current.latest === null || current.latest === current.installed)
+    return null
+  return current.latest
+})
+
+/**
+ * Release notes are untrusted third-party Markdown, exactly like a README, so they go
+ * through the same restricted renderer.
+ */
+const changelogHtml = computed(() =>
+  (changelog.value?.entries ?? []).map((entry) => ({
+    ...entry,
+    html: entry.body.trim() === '' ? null : renderMarkdown(entry.body),
+  })),
+)
+
+const changelogEmpty = computed(() => {
+  switch (changelog.value?.unavailable) {
+    case 'not-github':
+      return 'Release notes are only read from GitHub, and this package lives elsewhere.'
+    case 'rate-limited':
+      return "GitHub's rate limit was reached. Set GITHUB_TOKEN before starting packui to raise it."
+    case 'unreachable':
+      return 'GitHub could not be reached.'
+    default:
+      return 'No release notes or changelog entries were found for these versions.'
+  }
+})
+
+/** How long the registry has seen no change: an upper bound on time since a release. */
+const inactiveYears = computed(() => yearsSince(health.value?.modified))
+
+async function loadExtras(name: string, target: string | null, from: string | null): Promise<void> {
+  const scoped = (path: string) => withSelection(path)
+  void apiFetch<PackageHealth>(scoped(`/package-health?name=${encodeURIComponent(name)}`))
+    .then((result) => {
+      if (props.packageName === name) health.value = result
+    })
+    .catch(() => undefined)
+
+  if (target === null) return
+  changelogLoading.value = true
+  const query = `name=${encodeURIComponent(name)}&to=${encodeURIComponent(target)}${
+    from === null ? '' : `&from=${encodeURIComponent(from)}`
+  }`
+  try {
+    const result = await apiFetch<ChangelogPayload>(scoped(`/changelog?${query}`))
+    if (props.packageName === name) changelog.value = result
+  } catch {
+    if (props.packageName === name) changelog.value = null
+  } finally {
+    if (props.packageName === name) changelogLoading.value = false
+  }
+}
+
 async function load(name: string): Promise<void> {
   loading.value = true
   error.value = null
   payload.value = null
+  health.value = null
+  changelog.value = null
   try {
     payload.value = await apiFetch<PackageDrawerPayload>(
       withSelection(`/package?name=${encodeURIComponent(name)}`),
@@ -48,6 +119,7 @@ async function load(name: string): Promise<void> {
   } finally {
     loading.value = false
   }
+  if (payload.value !== null) void loadExtras(name, upgradeTarget.value, payload.value.installed)
 }
 
 watch(
@@ -102,7 +174,28 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
             <dt>License</dt>
             <dd>{{ payload.detail?.license ?? '—' }}</dd>
           </div>
+          <div v-if="health?.weeklyDownloads !== null && health?.weeklyDownloads !== undefined">
+            <dt>Weekly downloads</dt>
+            <dd>{{ formatCount(health.weeklyDownloads) }}</dd>
+          </div>
+          <div v-if="health?.modified">
+            <dt>Registry activity</dt>
+            <dd :class="{ stale: (inactiveYears ?? 0) >= 2 }">{{ formatAge(health.modified) }}</dd>
+          </div>
+          <div v-if="health?.repository?.pushedAt">
+            <dt>Last push</dt>
+            <dd>{{ formatAge(health.repository.pushedAt) }}</dd>
+          </div>
         </dl>
+
+        <p v-if="health?.repository?.archived" class="deprecated">
+          <strong>Repository archived.</strong> Its maintainers have made it read-only; expect no
+          further fixes.
+        </p>
+        <p v-else-if="(inactiveYears ?? 0) >= 2" class="stale-note">
+          Nothing has been published in {{ inactiveYears }} years. That can mean finished rather
+          than abandoned, but security fixes are unlikely to arrive.
+        </p>
 
         <div class="links">
           <a
@@ -147,6 +240,52 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
               </p>
             </li>
           </ul>
+        </section>
+
+        <section v-if="upgradeTarget" class="section">
+          <h3>Upgrading to {{ upgradeTarget }}</h3>
+          <CompatSummary :name="payload.name" :version="upgradeTarget" />
+
+          <h4 class="subhead">
+            What changed
+            <template v-if="payload.installed">since {{ payload.installed }}</template>
+            <span v-if="changelog?.source" class="muted small">
+              · from {{ changelog.source === 'releases' ? 'GitHub releases' : 'CHANGELOG.md' }}
+            </span>
+          </h4>
+          <p v-if="changelogLoading" class="muted">Reading release notes…</p>
+          <p v-else-if="changelog && changelog.entries.length === 0" class="muted">
+            {{ changelogEmpty }}
+          </p>
+          <div v-else-if="changelog" class="changes">
+            <details
+              v-for="(entry, index) in changelogHtml"
+              :key="entry.version"
+              class="change"
+              :open="index === 0"
+            >
+              <summary>
+                <span class="mono">{{ entry.version }}</span>
+                <span v-if="entry.date" class="muted small">{{ entry.date.slice(0, 10) }}</span>
+                <a
+                  v-if="entry.url"
+                  :href="entry.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="small"
+                  @click.stop
+                >
+                  on GitHub
+                </a>
+              </summary>
+              <!-- eslint-disable-next-line vue/no-v-html -- see composables/markdown.ts -->
+              <div v-if="entry.html" class="readme" v-html="entry.html" />
+              <p v-else class="muted small">No notes for this version.</p>
+            </details>
+            <p v-if="changelog.truncated" class="muted small">
+              Showing the newest {{ changelog.entries.length }} versions.
+            </p>
+          </div>
         </section>
 
         <section class="section">
@@ -405,6 +544,58 @@ function fixedVersionsFor(advisory: AdvisoryDetail): string {
 }
 .error {
   color: var(--danger);
+}
+
+.stale {
+  color: var(--minor);
+}
+
+.stale-note {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3);
+  font-size: 13px;
+  color: var(--minor);
+  border: 1px solid color-mix(in oklab, var(--minor) 35%, transparent);
+  border-radius: var(--radius-md);
+}
+
+.subhead {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.small {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.changes {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.change {
+  padding: var(--space-2) var(--space-3);
+  border-block-end: 1px solid var(--border);
+}
+
+.change:last-of-type {
+  border-block-end: none;
+}
+
+.change summary {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.change a {
+  color: var(--accent);
 }
 
 .readme {

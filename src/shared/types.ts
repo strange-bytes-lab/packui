@@ -45,6 +45,8 @@ export interface DependencyRow {
    * which OSV cannot know about — so its name is never sent there either.
    */
   vulnerabilityCheck?: VulnerabilityCheck
+  /** When the registry last saw any change to the package. Absent until enrichment. */
+  registryModified?: string | null
 }
 
 export type VulnerabilityCheck = 'checked' | 'unavailable' | 'private'
