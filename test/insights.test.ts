@@ -10,18 +10,18 @@ import {
 import { checkCompatibility, checkEngines } from '../src/server/core/compat.ts'
 import { githubRepoFromUrl } from '../src/server/core/github.ts'
 import { formatAge, formatBytes, yearsSince } from '../src/ui/composables/format.ts'
+import { restoreHome, setHome } from './helpers/home.ts'
 
 let home: string
-const originalHome = process.env.HOME
 
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), 'packui-insights-'))
-  process.env.HOME = home
+  setHome(home)
   vi.resetModules()
 })
 
 afterEach(async () => {
-  process.env.HOME = originalHome
+  restoreHome()
   vi.unstubAllGlobals()
   await rm(home, { recursive: true, force: true })
 })

@@ -1,0 +1,3 @@
+# The lockfile and manifest readers, and the fixtures that test them, expect LF. A
+# Windows checkout with core.autocrlf would otherwise rewrite them on the way out.
+* text=auto eol=lf

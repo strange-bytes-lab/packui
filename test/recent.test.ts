@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { restoreHome, setHome } from './helpers/home.ts'
 
 /**
  * Recent projects extend the allowlist, so these check both halves: that a project
@@ -12,17 +13,16 @@ const npmProject = fileURLToPath(new URL('./fixtures/npm-project', import.meta.u
 const pnpmProject = fileURLToPath(new URL('./fixtures/pnpm-project', import.meta.url))
 
 let home: string
-const originalHome = process.env.HOME
 
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), 'packui-recent-'))
-  process.env.HOME = home
+  setHome(home)
   // ~/.packui is resolved at import time.
   vi.resetModules()
 })
 
 afterEach(async () => {
-  process.env.HOME = originalHome
+  restoreHome()
   await rm(home, { recursive: true, force: true })
 })
 

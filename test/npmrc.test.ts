@@ -10,6 +10,7 @@ import {
   parseNpmrc,
   registryFor,
 } from '../src/server/core/npmrc.ts'
+import { restoreHome, setHome } from './helpers/home.ts'
 
 /**
  * Credentials from .npmrc are the one secret packui handles. These pin down that a
@@ -17,20 +18,19 @@ import {
  */
 let home: string
 let project: string
-const originalHome = process.env.HOME
 const originalUserConfig = process.env.NPM_CONFIG_USERCONFIG
 
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), 'packui-npmrc-'))
   project = join(home, 'project')
   await mkdir(project)
-  process.env.HOME = home
+  setHome(home)
   delete process.env.NPM_CONFIG_USERCONFIG
   vi.resetModules()
 })
 
 afterEach(async () => {
-  process.env.HOME = originalHome
+  restoreHome()
   if (originalUserConfig === undefined) delete process.env.NPM_CONFIG_USERCONFIG
   else process.env.NPM_CONFIG_USERCONFIG = originalUserConfig
   delete process.env.PACKUI_TEST_TOKEN

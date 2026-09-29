@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { findDependents, findUsages } from '../src/server/core/usage.ts'
+import { DIR_LINK } from './helpers/home.ts'
 
 /**
  * The import scan is the gate that stops a removal from silently breaking a project,
@@ -163,7 +164,7 @@ describe('dependent scanning', () => {
     )
 
     await mkdir(join(project, 'node_modules'), { recursive: true })
-    await symlink(store, join(project, 'node_modules', 'linked-dep'), 'dir')
+    await symlink(store, join(project, 'node_modules', 'linked-dep'), DIR_LINK)
 
     expect(await findDependents(project, 'target')).toEqual(['linked-dep'])
   })
@@ -178,7 +179,7 @@ describe('dependent scanning', () => {
     )
 
     await mkdir(join(project, 'node_modules', '@scope'), { recursive: true })
-    await symlink(store, join(project, 'node_modules', '@scope', 'linked'), 'dir')
+    await symlink(store, join(project, 'node_modules', '@scope', 'linked'), DIR_LINK)
 
     expect(await findDependents(project, 'target')).toEqual(['@scope/linked'])
   })

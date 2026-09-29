@@ -1,6 +1,7 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import type { BuiltCommand } from './commands.ts'
+import { toInvocation } from './spawnable.ts'
 
 /**
  * Runs a package manager command in a project and streams its output.
@@ -32,9 +33,18 @@ export function runCommand(
   signal?: AbortSignal,
 ): Promise<ExecResult> {
   return new Promise<ExecResult>((resolve) => {
-    const child = spawn(built.command, built.args, {
+    let invocation
+    try {
+      invocation = toInvocation(built.command, built.args)
+    } catch (error) {
+      resolve({ code: null, error: error instanceof Error ? error.message : 'Cannot run command' })
+      return
+    }
+
+    const child = spawn(invocation.file, invocation.args, {
       cwd: built.cwd === undefined ? projectPath : join(projectPath, built.cwd),
       shell: false,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments ?? false,
       env: {
         ...process.env,
         // Package managers emit progress spinners and colour codes when they think
@@ -54,12 +64,12 @@ export function runCommand(
     }
 
     const timer = setTimeout(() => {
-      child.kill('SIGTERM')
+      stop(child)
       finish({ code: null, error: `Timed out after ${TIMEOUT_MS / 1000}s` })
     }, TIMEOUT_MS)
 
     const abort = (): void => {
-      child.kill('SIGTERM')
+      stop(child)
       finish({ code: null, error: 'Cancelled' })
     }
     signal?.addEventListener('abort', abort, { once: true })
@@ -82,6 +92,19 @@ export function runCommand(
       finish({ code, error: null })
     })
   })
+}
+
+/**
+ * Stops a package manager and everything it started. On Windows the child may be
+ * cmd.exe running a shim, and killing cmd.exe leaves the package manager running
+ * and still writing the lockfile, so the whole tree goes.
+ */
+function stop(child: ChildProcess): void {
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', shell: false })
+    return
+  }
+  child.kill('SIGTERM')
 }
 
 /**

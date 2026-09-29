@@ -48,15 +48,16 @@ jobs:
         run: ${{ matrix.task.run }}
 
   # The parts that can differ. `engines` claims >=22, so both 22 and 24 are tested
-  # rather than assumed, and macOS is here because the global-scope layouts (volta,
-  # Homebrew, nvm) are filesystem conventions that differ per platform.
+  # rather than assumed. macOS and Windows are here because the global-scope layouts
+  # (volta, Homebrew, nvm, nvm-windows) are filesystem conventions that differ per
+  # platform, and Windows runs package managers through .cmd shims (core/spawnable.ts).
   test:
     name: test · node ${{ matrix.node }} · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22, 24]
 
     steps:
