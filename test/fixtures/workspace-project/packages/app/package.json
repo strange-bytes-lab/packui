@@ -1,0 +1,5 @@
+{
+  "name": "@fixture/app",
+  "version": "1.0.0",
+  "dependencies": { "shared-lib": "^1.0.0", "only-app": "^2.0.0" }
+}

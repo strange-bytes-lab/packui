@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import type { ProjectAccess } from './api/access.ts'
+import { createProjectAccess, type RefreshableAccess } from './api/access.ts'
 import { createDepsHandler } from './api/deps.ts'
 import { createEnrichHandler } from './api/enrich.ts'
 import { globalDepsHandler, globalScopesHandler } from './api/globals.ts'
@@ -8,6 +8,7 @@ import { createImpactHandler } from './api/impact.ts'
 import { pruneCache } from './core/cache.ts'
 import { createMutateHandler, createRollbackHandler, createSnapshotsHandler } from './api/mutate.ts'
 import { createPackageHandler } from './api/package.ts'
+import { createWorkspaceHandler } from './api/workspace.ts'
 import { Router, sendError, sendJson } from './router.ts'
 import { hasAllowedOrigin, hasValidToken, sessionToken } from './security.ts'
 import { serveStatic } from './static.ts'
@@ -37,17 +38,14 @@ export interface RunningServer {
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-function buildRouter(options: StartOptions): Router {
+function buildRouter(options: StartOptions, access: RefreshableAccess): Router {
   const router = new Router()
 
   router.get('/api/health', ({ res }) => {
     sendJson(res, 200, { ok: true, projectPath: options.projectPath })
   })
 
-  // Only the project packui was launched against is readable for now. The sidebar's
-  // multi-project list will extend this allowlist rather than remove it.
-  const access: ProjectAccess = { allowedProjects: () => [options.projectPath] }
-
+  router.get('/api/workspace', createWorkspaceHandler(access))
   router.get('/api/deps', createDepsHandler(access))
   router.get('/api/enrich', createEnrichHandler(access))
   router.get('/api/package', createPackageHandler(access))
@@ -72,7 +70,9 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
   // little disk IO costs the user nothing. Not awaited: it must never delay the UI.
   void pruneCache()
 
-  const router = buildRouter(options)
+  const access = createProjectAccess(options.projectPath)
+  await access.refresh()
+  const router = buildRouter(options, access)
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     // The Host header is untrusted; it only ever fills in the base of a URL we parse.

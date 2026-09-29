@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { apiFetch } from '@/composables/useApi'
 import { renderMarkdown } from '@/composables/markdown'
+import { withSelection } from '@/stores/useProject'
 import type { AdvisoryDetail, PackageDrawerPayload } from '@/types/drawer'
 
 const props = defineProps<{ packageName: string | null }>()
@@ -40,7 +41,7 @@ async function load(name: string): Promise<void> {
   payload.value = null
   try {
     payload.value = await apiFetch<PackageDrawerPayload>(
-      `/package?name=${encodeURIComponent(name)}`,
+      withSelection(`/package?name=${encodeURIComponent(name)}`),
     )
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'Could not load this package'

@@ -29,13 +29,25 @@ const TRACKED_FILES = [
   'bun.lockb',
 ]
 
+/** Lockfiles only: the files a workspace root contributes to a package's snapshot. */
+const LOCKFILES = TRACKED_FILES.filter((file) => file !== 'package.json')
+
+/** Prefix, inside a snapshot, for files that came from the workspace root. */
+const ROOT_PREFIX = '@root/'
+
 export interface Snapshot {
   id: string
   projectPath: string
   createdAt: string
+  /** Relative names; files from the workspace root carry the `@root/` prefix. */
   files: string[]
   /** What the snapshot was taken for, shown in the UI. */
   label: string
+  /**
+   * Set for a workspace package: the root whose lockfile was snapshotted with it. A
+   * package's upgrade rewrites the root's lockfile, so undoing it has to put that back.
+   */
+  lockfileRoot?: string
 }
 
 function projectKey(projectPath: string): string {
@@ -53,7 +65,11 @@ async function exists(path: string): Promise<boolean> {
   )
 }
 
-export async function createSnapshot(projectPath: string, label: string): Promise<Snapshot> {
+export async function createSnapshot(
+  projectPath: string,
+  label: string,
+  lockfileRoot?: string,
+): Promise<Snapshot> {
   // Sortable and unique: snapshots are listed and pruned by id order.
   const id = new Date().toISOString().replace(/[:.]/g, '-')
   const target = snapshotDir(projectPath, id)
@@ -72,12 +88,24 @@ export async function createSnapshot(projectPath: string, label: string): Promis
     throw new Error('Nothing to back up: no package.json found')
   }
 
+  const separateRoot = lockfileRoot !== undefined && lockfileRoot !== projectPath
+  if (separateRoot) {
+    await mkdir(join(target, ROOT_PREFIX), { recursive: true })
+    for (const file of LOCKFILES) {
+      const source = join(lockfileRoot, file)
+      if (!(await exists(source))) continue
+      await copyFile(source, join(target, ROOT_PREFIX, file))
+      copied.push(`${ROOT_PREFIX}${file}`)
+    }
+  }
+
   const snapshot: Snapshot = {
     id,
     projectPath,
     createdAt: new Date().toISOString(),
     files: copied,
     label,
+    ...(separateRoot ? { lockfileRoot } : {}),
   }
 
   const { writeFile } = await import('node:fs/promises')
@@ -122,7 +150,11 @@ export async function listSnapshots(projectPath: string): Promise<Snapshot[]> {
  * restoreSnapshot on its own leaves the project in the "lockfile changed, not yet
  * installed" state that the alignment check is designed to catch.
  */
-export async function restoreSnapshot(projectPath: string, id: string): Promise<Snapshot> {
+export async function restoreSnapshot(
+  projectPath: string,
+  id: string,
+  lockfileRoot?: string,
+): Promise<Snapshot> {
   // `id` reaches here from a client request, so it is checked against what is
   // actually on disk rather than being joined into a path directly.
   const snapshots = await listSnapshots(projectPath)
@@ -131,17 +163,30 @@ export async function restoreSnapshot(projectPath: string, id: string): Promise<
 
   const source = snapshotDir(projectPath, snapshot.id)
 
+  // The root is written to from the snapshot's own metadata, so it must be the root
+  // this project belongs to now — not whatever a file under ~/.packui claims.
+  const expectedRoot = lockfileRoot === projectPath ? undefined : lockfileRoot
+  if (snapshot.lockfileRoot !== expectedRoot) {
+    throw new Error('This snapshot was taken for a different workspace layout')
+  }
+
   // A lockfile present in the project but absent from the snapshot must be removed,
   // or a restored package.json would sit next to a lockfile it never matched.
-  for (const file of TRACKED_FILES) {
-    const inSnapshot = snapshot.files.includes(file)
-    const target = join(projectPath, file)
-    if (inSnapshot) {
-      await copyFile(join(source, file), target)
-    } else if (await exists(target)) {
-      await rm(target, { force: true })
+  const restore = async (directory: string, files: readonly string[], prefix: string) => {
+    for (const file of files) {
+      const inSnapshot = snapshot.files.includes(`${prefix}${file}`)
+      const target = join(directory, file)
+      if (inSnapshot) {
+        await copyFile(join(source, prefix, file), target)
+      } else if (await exists(target)) {
+        await rm(target, { force: true })
+      }
     }
   }
+
+  await restore(projectPath, TRACKED_FILES, '')
+  if (snapshot.lockfileRoot !== undefined)
+    await restore(snapshot.lockfileRoot, LOCKFILES, ROOT_PREFIX)
 
   return snapshot
 }

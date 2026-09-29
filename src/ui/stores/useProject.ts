@@ -23,8 +23,24 @@ export interface GlobalScopeSummary {
   roots: string[]
 }
 
-/** Which list the table is currently showing. */
-export type Selection = { kind: 'project' } | { kind: 'global'; id: string }
+/** Which list the table is currently showing. No path means the launched project. */
+export type Selection = { kind: 'project'; path?: string } | { kind: 'global'; id: string }
+
+export interface WorkspacePackageSummary {
+  path: string
+  relative: string
+  name: string
+}
+
+export interface RangeMismatch {
+  name: string
+  declarations: { package: string; relative: string; range: string; field: string }[]
+}
+
+export interface WorkspaceSummary {
+  root: string
+  packages: WorkspacePackageSummary[]
+}
 
 const report = ref<DependencyReport | null>(null)
 const globalScopes = ref<GlobalScopeSummary[]>([])
@@ -33,6 +49,8 @@ const loading = ref(false)
 const enriching = ref(false)
 const error = ref<string | null>(null)
 const enrichError = ref<string | null>(null)
+const workspace = ref<WorkspaceSummary | null>(null)
+const mismatches = ref<RangeMismatch[]>([])
 
 /**
  * Enrichment is slow and the sidebar is fast, so a response can arrive after the user
@@ -45,9 +63,36 @@ let enrichInFlight: AbortController | null = null
 
 /** Query string identifying the current selection, shared by every endpoint. */
 function selectionQuery(): string {
-  return selection.value.kind === 'global'
-    ? `?scope=global&id=${encodeURIComponent(selection.value.id)}`
-    : ''
+  const current = selection.value
+  if (current.kind === 'global') return `?scope=global&id=${encodeURIComponent(current.id)}`
+  return current.path === undefined ? '' : `?path=${encodeURIComponent(current.path)}`
+}
+
+/**
+ * An endpoint path with the current selection appended, whether or not it already has
+ * a query string. Every per-project request goes through this, so the drawer and the
+ * removal dialog read the package the table is showing rather than the launched one.
+ */
+export function withSelection(path: string): string {
+  const query = selectionQuery()
+  if (query === '') return path
+  return path.includes('?') ? `${path}&${query.slice(1)}` : `${path}${query}`
+}
+
+/** The workspace the launched project belongs to, for the sidebar. */
+export async function loadWorkspace(): Promise<void> {
+  try {
+    const body = await apiFetch<{
+      workspace: WorkspaceSummary | null
+      mismatches: RangeMismatch[]
+    }>('/workspace')
+    workspace.value = body.workspace
+    mismatches.value = body.mismatches
+  } catch {
+    // Best-effort, like global discovery: the project view works without it.
+    workspace.value = null
+    mismatches.value = []
+  }
 }
 
 export async function loadGlobalScopes(): Promise<void> {
@@ -70,7 +115,9 @@ export async function load(target: Selection = selection.value): Promise<void> {
   error.value = null
 
   const path =
-    target.kind === 'global' ? `/global/deps?id=${encodeURIComponent(target.id)}` : '/deps'
+    target.kind === 'global'
+      ? `/global/deps?id=${encodeURIComponent(target.id)}`
+      : withSelection('/deps')
 
   try {
     report.value = await apiFetch<DependencyReport>(path)
@@ -141,6 +188,8 @@ export function useProject() {
     enriching,
     error,
     enrichError,
+    workspace,
+    mismatches,
     selectionQuery,
     isGlobal: computed(() => report.value?.project.scope === 'global'),
     project: computed(() => report.value?.project ?? null),

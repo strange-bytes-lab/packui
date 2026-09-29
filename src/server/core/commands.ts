@@ -128,11 +128,36 @@ export interface BuiltCommand {
   args: string[]
   /** The same command as a single string, shown to the user before it runs. */
   display: string
+  /**
+   * Where to run it, relative to the directory the caller runs commands in (the
+   * workspace root). Unset means that directory itself.
+   */
+  cwd?: string
+}
+
+/**
+ * Pointing a command at one workspace package. npm takes `--workspace` from the root;
+ * pnpm, yarn (classic and berry) and bun act on the package whose directory they are
+ * run in and find the root themselves. The importer comes from packui's own workspace
+ * detection, never from the client.
+ */
+function inWorkspace(
+  packageManager: PackageManager,
+  built: BuiltCommand,
+  importer: string | undefined,
+): BuiltCommand {
+  if (importer === undefined || importer === '.') return built
+  if (packageManager === 'npm') {
+    const args = [...built.args, `--workspace=${importer}`]
+    return { ...built, args, display: `npm ${args.join(' ')}` }
+  }
+  return { ...built, cwd: importer, display: `cd ${importer} && ${built.display}` }
 }
 
 export function buildCommand(
   packageManager: PackageManager,
   request: MutationRequest,
+  importer?: string,
 ): BuiltCommand {
   if (!isValidPackageName(request.name)) {
     throw new Error(`Invalid package name: ${request.name}`)
@@ -153,11 +178,11 @@ export function buildCommand(
     args = [verb, `${request.name}@${version}`, ...saveFlags(packageManager, request.kind)]
   }
 
-  return {
-    command: packageManager,
-    args,
-    display: `${packageManager} ${args.join(' ')}`,
-  }
+  return inWorkspace(
+    packageManager,
+    { command: packageManager, args, display: `${packageManager} ${args.join(' ')}` },
+    importer,
+  )
 }
 
 /**
@@ -171,6 +196,7 @@ export function buildCommand(
 export function buildBatchCommands(
   packageManager: PackageManager,
   requests: readonly MutationRequest[],
+  importer?: string,
 ): BuiltCommand[] {
   const byKind = new Map<DependencyKind, MutationRequest[]>()
   for (const request of requests) {
@@ -190,7 +216,11 @@ export function buildBatchCommands(
   return [...byKind.entries()].map(([kind, group]) => {
     const specs = group.map((request) => `${request.name}@${request.version ?? 'latest'}`)
     const args = [verb, ...specs, ...saveFlags(packageManager, kind)]
-    return { command: packageManager, args, display: `${packageManager} ${args.join(' ')}` }
+    return inWorkspace(
+      packageManager,
+      { command: packageManager, args, display: `${packageManager} ${args.join(' ')}` },
+      importer,
+    )
   })
 }
 

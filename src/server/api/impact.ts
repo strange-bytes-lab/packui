@@ -1,4 +1,5 @@
 import { isValidPackageName } from '../core/commands.ts'
+import { projectContext } from '../core/context.ts'
 import { readInstalledVersion } from '../core/installed.ts'
 import { readManifest } from '../core/manifest.ts'
 import { findDependents, findUsages, type Usage } from '../core/usage.ts'
@@ -60,11 +61,13 @@ export function createImpactHandler(access: ProjectAccess) {
     }
 
     try {
+      const { root } = await projectContext(projectPath)
       const [manifest, installed, usageReport, dependents] = await Promise.all([
         readManifest(projectPath),
-        readInstalledVersion(projectPath, name),
+        readInstalledVersion(projectPath, name, root),
         findUsages(projectPath, name),
-        findDependents(projectPath, name),
+        // In a workspace the hoisted tree at the root is where dependents are installed.
+        findDependents(root, name),
       ])
 
       const declared = manifest.dependencies.find((dependency) => dependency.name === name)
