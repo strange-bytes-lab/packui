@@ -44,8 +44,8 @@ test/              Vitest suites; fixture projects under test/fixtures/
 
 CI (`.github/workflows/ci.yml`) has two jobs. `check` runs lint, format, typecheck and
 verify:deps once each on ubuntu — none of those answers can depend on the platform.
-`test` runs the suite and the build across Node 22 and 24 on ubuntu and macOS, which is
-what `engines: >=22` claims. Both use `fail-fast: false` so one run reports every
+`test` runs the suite and the build across Node 22 and 24 on ubuntu, macOS and Windows,
+which is what `engines: >=22` claims. Both use `fail-fast: false` so one run reports every
 failing stage.
 
 A third job, `smoke`, boots the built server and asserts the UI serves, the shell
@@ -54,8 +54,17 @@ one with 401, and rejects a cross-origin mutation — including one from the dev
 port — with 403. Those are security regressions if they ever go green wrongly. Do not
 relax them.
 
-Windows is deliberately untested: `bin/packui.mjs` shells out to `start` and
-`core/global.ts` assumes POSIX layouts. A green tick there would be a claim, not a fact.
+Windows is tested, and three things make it work — keep them intact:
+
+- Package managers there are `.cmd` shims, which Node refuses to spawn without a shell.
+  `core/spawnable.ts` spawns a `.exe` directly and runs a shim through `cmd.exe /d /s /c`
+  only after every argument passes an allowlist with no character cmd.exe interprets.
+  It refuses anything else rather than escaping it. Every subprocess goes through
+  `toInvocation`; never call `spawn`/`execFile` on a package manager directly.
+- Tests redirect the home directory with `test/helpers/home.ts` (`os.homedir()` reads
+  `USERPROFILE` on Windows, not `HOME`) and link directories with `DIR_LINK` (junctions).
+- The global-layout tests pin `process.platform`, so the Windows layouts are exercised
+  on every OS and the POSIX ones on Windows.
 
 ## Security model
 
@@ -68,7 +77,11 @@ user's browser can reach `127.0.0.1`.
   `?t=` on first load). The token is regenerated each boot and never written to disk.
 - Mutating methods additionally require a loopback `Origin` (DNS-rebinding defense).
 - Static serving must never resolve outside `dist/ui`.
-- Project paths from the client are resolved and checked against an allowlist.
+- Project paths from the client are resolved and checked against an allowlist. It holds
+  the launched project, projects the CLI was launched against before
+  (`~/.packui/recent.json`, written only at CLI boot, never by an API route), and the
+  members of their workspaces as read from the workspace's own config on disk. Nothing
+  a request sends can add to it. Embedders and tests leave `rememberProjects` off.
 - Package names and versions are validated before reaching a subprocess, and commands
   are spawned with an argv array and `shell: false`. **There is one validator** —
   `isValidPackageName` in `core/commands.ts` — and every route that takes a name uses
@@ -83,6 +96,11 @@ user's browser can reach `127.0.0.1`.
   `src/ui/public/theme-boot.js` rather than in a `<script>` tag. Every response also
   carries `nosniff` and `no-referrer`. The CSP is the second layer under the README
   renderer: it is what makes a future bug in the renderer non-exploitable.
+- Registry credentials from `.npmrc` (`core/npmrc.ts`) are sent only to a URL whose host
+  and path match the registry they are keyed to, only over https (http to loopback
+  only), and never leave the server: not to the browser, not into the cache, not into
+  an error. Packages whose scope is mapped to a private registry are never sent to OSV
+  or the download counter. `GITHUB_TOKEN` goes to api.github.com and nowhere else.
 - READMEs are untrusted third-party text. They go through the renderer in
   `src/ui/composables/markdown.ts`, which is safe by construction: raw HTML is
   translated to Markdown *before* escaping and any untranslated tag is dropped, so
@@ -90,10 +108,14 @@ user's browser can reach `127.0.0.1`.
   elements are removed with their contents, hrefs must be http/https/mailto, and
   images become alt text rather than being fetched.
   Do not "improve" this by passing HTML through — the visible-noise problem it solves
-  has a safe fix, and rendering registry HTML directly does not.
+  has a safe fix, and rendering registry HTML directly does not. Release notes and
+  CHANGELOG sections are the same kind of text and go through the same renderer.
+- The HTML export (`composables/exportReport.ts`) escapes every value and carries its
+  own CSP meta forbidding script — the same two layers, for a file opened from disk.
 
-`test/server.test.ts`, `test/static.test.ts`, `test/markdown.test.ts` and
-`test/mutate.test.ts` cover these. Do not weaken them.
+`test/server.test.ts`, `test/static.test.ts`, `test/markdown.test.ts`,
+`test/mutate.test.ts`, `test/npmrc.test.ts`, `test/spawnable.test.ts`,
+`test/recent.test.ts` and `test/export.test.ts` cover these. Do not weaken them.
 
 ## Mutation model
 
@@ -107,6 +129,13 @@ lockfile, run the project's own package manager, stream its output, report the r
   rollback is itself undoable.
 - **One mutation at a time per project** (`withProjectLock`). Concurrent package
   manager processes corrupt lockfiles.
+- **In a workspace, the lockfile belongs to the root** (`core/context.ts`). The lock is
+  taken on the root, the snapshot includes the root's lockfile beside the package's
+  manifest, drift is read from the package's importer entry, and commands target the
+  package with npm `--workspace` or by running pnpm, yarn and bun inside it. A restore
+  refuses a snapshot whose recorded root is not the project's current root.
+- **Overrides for indirect advisories are shown, never applied.** The Insights dialog
+  offers a copyable block; editing package.json is the user's call.
 - **Choose the save flag from the dependency's current kind**, or an upgrade will move
   a devDependency into `dependencies`. Batch upgrades group by kind for this reason.
 - **Show the command before running it.**
@@ -189,6 +218,19 @@ from `main`, keeps a release PR open with the version they imply, and writes
 - Installed versions are read from `node_modules/<pkg>/package.json`, not from
   lockfiles — that field is identical across npm, pnpm, yarn and bun, whereas
   `bun.lockb` is binary and `pnpm-lock.yaml` would need a YAML parser we do not ship.
+  In a workspace they resolve from the package up to the root (`lookupDirectories`).
+- Lockfile drift (`core/lockdrift.ts`) is the one place lockfiles are read, and only
+  the part listing each importer's declared specifiers — never the resolution graph.
+  Never compare timestamps: a clone writes `package-lock.json` before `package.json`,
+  and a frozen install never touches the lockfile. A format it cannot read answers
+  `null`, which claims nothing either way.
+- The installed tree (`core/tree.ts`) is walked the way Node resolves imports, from
+  each package's real path, so hoisted, nested and pnpm layouts need no special cases.
+  Peer dependencies are not edges — the parent provides them, and following them would
+  blame a plugin for its host's advisories and weight.
+- `vulnerabilities: null` means nothing until `vulnerabilityCheck` says `checked`. OSV
+  unreachable with nothing cached is `unavailable`; a privately scoped package is
+  `private`. The UI and the export show both, so neither ever looks clean.
 - READMEs come from `node_modules/<pkg>/README.md`, not the registry. The registry
   returns an empty `readme` field on the packument and none at all on per-version
   documents (verified against minimist and vue). Reading locally is also more accurate,
@@ -207,3 +249,7 @@ from `main`, keeps a release PR open with the version they imply, and writes
   actually have advisories pay for it.
 - Every network path degrades to cached data, then to `null`, which the UI renders as
   "not checked" rather than "up to date". Never invent a clean bill of health.
+- GitHub (release notes, repository status) allows 60 unauthenticated requests an hour.
+  Every response is ETag-cached, so revalidation is free; keep it that way, and keep
+  whole-tree work (`/api/audit`, `/api/weight`, `/api/usage`) off the table's own load
+  path.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { apiFetch } from '@/composables/useApi'
 import { withSelection } from '@/stores/useProject'
 import type { CompatReport } from '@/types/drawer'
@@ -12,6 +12,15 @@ import type { CompatReport } from '@/types/drawer'
 const props = defineProps<{ name: string; version: string }>()
 
 const report = ref<CompatReport | null>(null)
+
+/**
+ * An optional peer that is not installed asks nothing of this project — Vite alone
+ * lists a dozen preprocessors — so those are counted rather than listed.
+ */
+const shownPeers = computed(() =>
+  (report.value?.peers ?? []).filter((peer) => !(peer.optional && peer.installed === null)),
+)
+const hiddenPeers = computed(() => (report.value?.peers.length ?? 0) - shownPeers.value.length)
 const state = ref<'loading' | 'ready' | 'unknown'>('loading')
 
 watch(
@@ -66,9 +75,9 @@ watch(
         </p>
       </template>
 
-      <ul v-if="report.peers.length > 0" class="peers">
+      <ul v-if="shownPeers.length > 0" class="peers">
         <li
-          v-for="peer in report.peers"
+          v-for="peer in shownPeers"
           :key="peer.name"
           :class="peer.satisfied === false ? 'bad' : peer.satisfied ? 'ok' : 'muted'"
         >
@@ -82,6 +91,10 @@ watch(
           </template>
         </li>
       </ul>
+      <p v-if="hiddenPeers > 0" class="line muted small">
+        {{ hiddenPeers }} optional {{ hiddenPeers === 1 ? 'peer' : 'peers' }} not installed, which
+        is fine.
+      </p>
     </template>
   </div>
 </template>
@@ -126,6 +139,11 @@ watch(
 
 .muted {
   color: var(--text-muted);
+}
+
+.small {
+  margin-block-start: var(--space-2);
+  font-size: 12px;
 }
 
 .mono {

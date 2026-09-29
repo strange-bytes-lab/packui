@@ -38,15 +38,25 @@ npx @strange-bytes/packui --no-open                  # don't open a browser
 > Use the URL printed in your terminal. It carries a session token that the API
 > requires, and a fresh one is generated every time packui starts.
 
-Works with **npm**, **pnpm**, **yarn** and **bun**. Needs **Node 22+**.
-Tested on macOS and Linux.
+Works with **npm**, **pnpm**, **yarn** and **bun**, including their workspaces.
+Needs **Node 22+**. Tested on macOS, Linux and Windows.
 
 ---
 
 ## ✨ What it does
 
 **📊 One row per dependency** — declared range, installed version, latest, how far
-behind, vulnerability state and whether your lockfile still matches reality.
+behind, vulnerability state and whether your lockfile still matches package.json.
+The lockfile check compares what each package manager actually recorded, so a fresh
+clone or a frozen install never trips it.
+
+**🧩 Monorepos** — launch packui anywhere in a workspace and every package is in the
+sidebar. Installs go through the workspace root, and the root view lists
+dependencies declared with different ranges in different packages.
+
+**🕳️ The whole tree, not just package.json** — most advisories live in the packages
+your dependencies depend on. packui checks every installed copy and shows the chain
+that pulls each one in, with the fixed version and an override you can copy.
 
 **⬆️ Upgrades that you can watch** — one package or everything outdated at once.
 packui runs *your* project's package manager, shows you the exact command before it
@@ -63,8 +73,23 @@ change, not after it succeeds. One click restores them and reinstalls.
 runtime rather than at install time. packui shows every file that still imports the
 package and every installed package that depends on it, then makes you type the name.
 
+**🔍 Look before you upgrade** — the drawer and the confirmation check the target's
+Node requirement and peer dependencies against your project, and show the release
+notes between your version and the target.
+
 **📖 A drawer per package** — readme, full version history, advisory detail with the
-versions that fix each one, links to the repository and its releases.
+versions that fix each one, weekly downloads, and whether the package or its
+repository has gone quiet or been archived.
+
+**📐 Insights** — what each dependency weighs on disk (and what removing it would
+actually free), packages installed at more than one version, dependencies nothing
+imports, and imports that only work because something else installed them.
+
+**📤 Export** — download the table as one self-contained HTML file for an issue or a
+pull request.
+
+**🗂️ Recent projects** — every project you have opened is one click away in the
+sidebar, without restarting.
 
 **🌍 Global CLIs too** — including the ones `npm root -g` cannot find. See below.
 
@@ -87,7 +112,8 @@ harder than it sounds, and `npm root -g` on its own gets it wrong:
   completely different.
 
 So packui asks every package manager *and* probes the layouts that volta, nvm, fnm,
-asdf, n and Homebrew actually use, then dedupes what it finds by real path.
+asdf, n, Homebrew and nvm-windows actually use, then dedupes what it finds by real
+path.
 
 > [!NOTE]
 > Global packages can't be rolled back — there's no manifest or lockfile behind a
@@ -107,7 +133,8 @@ page in your browser can reach `127.0.0.1`.
 | 🔑 **Session token** | Every `/api` request needs it. Regenerated each boot, never written to disk. |
 | 🚪 **Origin check** | Mutating requests must come from a loopback origin. This is what stops a random page in your browser reaching the API. |
 | 🧱 **CSP** | The UI is served under a policy with no `unsafe-inline`, no remote anything, and no framing. |
-| 🧼 **Validated input** | Package names and versions are checked before they reach a subprocess, and commands are spawned with an argv array and no shell. |
+| 🧼 **Validated input** | Package names and versions are checked before they reach a subprocess, and commands are spawned with an argv array and no shell. On Windows, where package managers are `.cmd` shims, arguments must also pass an allowlist with nothing `cmd.exe` interprets. |
+| 🗝️ **Registry credentials** | Tokens from `.npmrc` are sent only to the registry they are keyed to, only over https, and never leave the server process. Privately scoped package names are never sent to OSV or the download counter. |
 | 📄 **Untrusted readmes** | Rendered by a renderer that never emits a tag it did not construct itself. No remote images are fetched. |
 
 ---
@@ -126,9 +153,15 @@ The UI and server are bundled at build time, so the published package declares n
 enforces it on every CI run and again before every publish.
 
 Vulnerability data comes from [OSV.dev](https://osv.dev); version and deprecation
-data from the npm registry. Both are cached under `~/.packui`. Offline, packui falls
-back to cached data and then to *"not checked"* — it never reports a package as
-clean because a lookup failed.
+data from the npm registry, or whichever registry your `.npmrc` maps a package to;
+release notes and repository status from GitHub. All of it is cached under
+`~/.packui`. Offline, packui falls back to cached data and then to *"not checked"* —
+it never reports a package as clean because a lookup failed.
+
+> [!TIP]
+> GitHub allows 60 unauthenticated API requests an hour. Cached responses are
+> revalidated for free, so that is usually plenty; if not, set `GITHUB_TOKEN` before
+> starting packui. It is sent to `api.github.com` and nowhere else.
 
 ---
 
