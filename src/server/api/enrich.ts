@@ -15,7 +15,7 @@ async function reportFor(url: URL, access: ProjectAccess): Promise<DependencyRep
     return reportForScope(scope, await listGlobalPackages(scope))
   }
 
-  const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+  const projectPath = resolveAllowedProject(url.searchParams.get('path'), access)
   return projectPath === null ? null : buildReport(projectPath)
 }
 

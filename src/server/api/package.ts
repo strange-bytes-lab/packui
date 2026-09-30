@@ -63,10 +63,7 @@ function releasesUrlFor(repositoryUrl: string | null): string | null {
 
 export function createPackageHandler(access: ProjectAccess) {
   return async ({ req, res, url }: RequestContext): Promise<void> => {
-    const projectPath = resolveAllowedProject(
-      url.searchParams.get('path'),
-      access.allowedProjects(),
-    )
+    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access)
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return

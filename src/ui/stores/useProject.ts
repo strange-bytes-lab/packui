@@ -25,8 +25,12 @@ export interface GlobalScopeSummary {
   roots: string[]
 }
 
-/** Which list the table is currently showing. No path means the launched project. */
-export type Selection = { kind: 'project'; path?: string } | { kind: 'global'; id: string }
+/**
+ * Which list the table is currently showing. No path means the launched project.
+ * `home` is the project picker, shown when packui was launched outside a project.
+ */
+export type Selection =
+  { kind: 'project'; path?: string } | { kind: 'global'; id: string } | { kind: 'home' }
 
 export interface WorkspacePackageSummary {
   path: string
@@ -60,6 +64,10 @@ const enrichError = ref<string | null>(null)
 const workspace = ref<WorkspaceSummary | null>(null)
 const mismatches = ref<RangeMismatch[]>([])
 const recentProjects = ref<RecentProjectSummary[]>([])
+/** The launched project; null when launched outside one, undefined until known. */
+const launched = ref<string | null | undefined>(undefined)
+/** Where the add-folder picker opens: the directory packui was started in. */
+const startDir = ref<string | null>(null)
 const treeAudit = ref<TreeAudit | null>(null)
 const auditing = ref(false)
 const auditError = ref<string | null>(null)
@@ -79,6 +87,7 @@ let enrichInFlight: AbortController | null = null
 function selectionQuery(): string {
   const current = selection.value
   if (current.kind === 'global') return `?scope=global&id=${encodeURIComponent(current.id)}`
+  if (current.kind === 'home') return ''
   return current.path === undefined ? '' : `?path=${encodeURIComponent(current.path)}`
 }
 
@@ -93,14 +102,36 @@ export function withSelection(path: string): string {
   return path.includes('?') ? `${path}&${query.slice(1)}` : `${path}${query}`
 }
 
-/** Projects packui was launched against before, for switching without a restart. */
+/** Projects packui was launched against or opened before, for switching without a restart. */
 export async function loadRecentProjects(): Promise<void> {
   try {
-    const body = await apiFetch<{ recent: RecentProjectSummary[] }>('/projects')
+    const body = await apiFetch<{
+      launched: string | null
+      startDir: string
+      recent: RecentProjectSummary[]
+    }>('/projects')
     recentProjects.value = body.recent
+    launched.value = body.launched
+    startDir.value = body.startDir
   } catch {
     recentProjects.value = []
   }
+}
+
+/** Adds a folder to the project list. The server checks it holds a package.json. */
+export async function addProject(path: string): Promise<RecentProjectSummary> {
+  const { project } = await apiFetch<{ project: RecentProjectSummary }>('/projects', {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  })
+  await loadRecentProjects()
+  return project
+}
+
+/** Takes a project off the list. Its files are untouched. */
+export async function forgetProject(path: string): Promise<void> {
+  await apiFetch(`/projects?path=${encodeURIComponent(path)}`, { method: 'DELETE' })
+  await loadRecentProjects()
 }
 
 /** The workspace the shown project belongs to (the launched one by default). */
@@ -136,8 +167,21 @@ export async function loadGlobalScopes(): Promise<void> {
  */
 export async function load(target: Selection = selection.value): Promise<void> {
   selection.value = target
-  loading.value = true
   error.value = null
+  if (target.kind === 'home') {
+    // Superseding both generations first, so the aborted requests land as stale
+    // rather than as errors.
+    enrichGeneration += 1
+    auditGeneration += 1
+    enrichInFlight?.abort()
+    auditInFlight?.abort()
+    enriching.value = false
+    auditing.value = false
+    report.value = null
+    treeAudit.value = null
+    return
+  }
+  loading.value = true
 
   const path =
     target.kind === 'global'
@@ -246,6 +290,8 @@ export function useProject() {
     workspace,
     mismatches,
     recentProjects,
+    launched,
+    startDir,
     treeAudit,
     auditing,
     auditError,

@@ -26,10 +26,13 @@ npx @strange-bytes/packui
 That's it. No install, no config, no account.
 
 packui reads the project in your current directory, starts a server on
-`127.0.0.1:7225` and opens your browser.
+`127.0.0.1:7225` and opens your browser. Run it somewhere with no `package.json` —
+your dev folder, say — and it opens on a project picker instead: your recent
+projects, and a folder browser to add more.
 
 ```sh
 npx @strange-bytes/packui ~/dev/some-other-project   # a project somewhere else
+npx @strange-bytes/packui ~/dev                      # pick a project from there
 npx @strange-bytes/packui --port 8080                # a different port
 npx @strange-bytes/packui --no-open                  # don't open a browser
 ```
@@ -89,7 +92,10 @@ imports, and imports that only work because something else installed them.
 pull request.
 
 **🗂️ Recent projects** — every project you have opened is one click away in the
-sidebar, without restarting.
+sidebar, without restarting. **+ Add** opens any other folder with a `package.json`.
+
+**🔔 Update notice** — a quiet pill in the sidebar (and one line in the terminal)
+when a newer packui is published. `PACKUI_NO_UPDATE_CHECK=1` turns it off.
 
 **🌍 Global CLIs too** — including the ones `npm root -g` cannot find. See below.
 

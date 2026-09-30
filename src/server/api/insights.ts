@@ -28,7 +28,7 @@ interface Target {
 
 async function readTarget(ctx: RequestContext, access: ProjectAccess): Promise<Target | null> {
   const { req, res, url } = ctx
-  const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+  const projectPath = resolveAllowedProject(url.searchParams.get('path'), access)
   if (projectPath === null) {
     sendError(res, 403, 'Unknown project')
     return null

@@ -13,7 +13,7 @@ import { findScope } from './globals.ts'
 import { projectContext } from '../core/context.ts'
 import { detectPackageManager } from '../core/detect.ts'
 import { runCommand, withProjectLock } from '../core/exec.ts'
-import { sendError, sendJson, type RequestContext } from '../router.ts'
+import { readJsonBody, sendError, sendJson, type RequestContext } from '../router.ts'
 import { resolveAllowedProject, type ProjectAccess } from './access.ts'
 import { homedir } from 'node:os'
 import type { DependencyKind, PackageManager } from '../../shared/types.ts'
@@ -76,19 +76,6 @@ function readBatch(value: unknown): BatchEntry[] | null {
   return entries
 }
 
-async function readJsonBody(ctx: RequestContext): Promise<MutateBody> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of ctx.req) {
-    size += (chunk as Buffer).length
-    // A mutation request is a few hundred bytes; anything larger is not one.
-    if (size > 64 * 1024) throw new Error('Request body too large')
-    chunks.push(chunk as Buffer)
-  }
-  if (chunks.length === 0) return {}
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as MutateBody
-}
-
 /** Server-sent events, so the browser reconnect and parsing logic is the platform's. */
 function openStream(res: ServerResponse): (event: string, data: unknown) => void {
   res.writeHead(200, {
@@ -123,7 +110,7 @@ export function createMutateHandler(access: ProjectAccess) {
       ? // Global commands do not act on a project directory; run them from the user's
         // home so the package manager cannot pick up a stray local manifest.
         homedir()
-      : resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+      : resolveAllowedProject(url.searchParams.get('path'), access)
 
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
@@ -132,7 +119,7 @@ export function createMutateHandler(access: ProjectAccess) {
 
     let body: MutateBody
     try {
-      body = await readJsonBody(ctx)
+      body = await readJsonBody<MutateBody>(ctx.req)
     } catch (error) {
       sendError(res, 400, error instanceof Error ? error.message : 'Invalid request body')
       return
@@ -288,10 +275,7 @@ export function createRollbackHandler(access: ProjectAccess) {
   return async (ctx: RequestContext): Promise<void> => {
     const { res, url } = ctx
 
-    const projectPath = resolveAllowedProject(
-      url.searchParams.get('path'),
-      access.allowedProjects(),
-    )
+    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access)
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return
@@ -299,7 +283,7 @@ export function createRollbackHandler(access: ProjectAccess) {
 
     let body: MutateBody
     try {
-      body = await readJsonBody(ctx)
+      body = await readJsonBody<MutateBody>(ctx.req)
     } catch (error) {
       sendError(res, 400, error instanceof Error ? error.message : 'Invalid request body')
       return
@@ -368,10 +352,7 @@ export function createRollbackHandler(access: ProjectAccess) {
 
 export function createSnapshotsHandler(access: ProjectAccess) {
   return async ({ res, url }: RequestContext): Promise<void> => {
-    const projectPath = resolveAllowedProject(
-      url.searchParams.get('path'),
-      access.allowedProjects(),
-    )
+    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access)
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return

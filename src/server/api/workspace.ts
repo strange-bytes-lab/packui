@@ -11,10 +11,7 @@ export function createWorkspaceHandler(access: RefreshableAccess) {
   return async ({ res, url }: RequestContext): Promise<void> => {
     // A package added since boot should be selectable without restarting packui.
     await access.refresh()
-    const projectPath = resolveAllowedProject(
-      url.searchParams.get('path'),
-      access.allowedProjects(),
-    )
+    const projectPath = resolveAllowedProject(url.searchParams.get('path'), access)
     if (projectPath === null) {
       sendError(res, 403, 'Unknown project')
       return

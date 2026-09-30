@@ -71,3 +71,16 @@ export function sendJson(res: ServerResponse, status: number, body: unknown): vo
 export function sendError(res: ServerResponse, status: number, message: string): void {
   sendJson(res, status, { error: message })
 }
+
+/** Reads a small JSON request body. Every write endpoint takes a few hundred bytes. */
+export async function readJsonBody<T>(req: IncomingMessage, limit = 64 * 1024): Promise<T> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length
+    if (size > limit) throw new Error('Request body too large')
+    chunks.push(chunk as Buffer)
+  }
+  if (chunks.length === 0) return {} as T
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T
+}
