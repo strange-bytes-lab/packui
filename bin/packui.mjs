@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { access } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
@@ -9,7 +9,10 @@ const HELP = `
   packui — a local GUI for your NPM dependencies
 
   Usage
-    $ packui [project-path]
+    $ packui [path]
+
+  Run it inside a project to open that project, or anywhere else (your dev
+  folder, say) to pick one of your recent projects or add a folder.
 
   Options
     --port <number>   Port to listen on (default: an open port)
@@ -52,20 +55,25 @@ if (values.help) {
   process.exit(0)
 }
 
-const projectPath = resolve(process.cwd(), positionals[0] ?? '.')
+const target = resolve(process.cwd(), positionals[0] ?? '.')
 
-try {
-  await access(resolve(projectPath, 'package.json'))
-} catch {
-  console.error(`\n  No package.json found in ${projectPath}\n`)
+const targetInfo = await stat(target).catch(() => null)
+if (targetInfo === null || !targetInfo.isDirectory()) {
+  console.error(`\n  No folder at ${target}\n`)
   process.exit(1)
 }
+
+// A folder with no package.json is not an error: packui opens on its project picker,
+// starting there.
+const manifest = await stat(resolve(target, 'package.json')).catch(() => null)
+const projectPath = manifest?.isFile() === true ? target : null
 
 const serverEntry = fileURLToPath(new URL('../dist/server/index.js', import.meta.url))
 
 let startServer
+let checkForUpdate
 try {
-  ;({ startServer } = await import(serverEntry))
+  ;({ startServer, checkForUpdate } = await import(serverEntry))
 } catch {
   console.error('\n  packui is not built. Run `pnpm build` first.\n')
   process.exit(1)
@@ -77,12 +85,26 @@ if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535))
   process.exit(1)
 }
 
-const server = await startServer({ projectPath, port, rememberProjects: true })
+const server = await startServer({ projectPath, startDir: target, port, rememberProjects: true })
 
 console.log(`\n  packui  ${server.url}`)
-console.log(`  project ${projectPath}\n`)
+console.log(
+  projectPath === null
+    ? `  folder  ${target} (no package.json; pick a project in the browser)\n`
+    : `  project ${projectPath}\n`,
+)
 
 if (!values['no-open']) openBrowser(server.url)
+
+// One quiet line if a newer packui is out. Never waited on, and never an error.
+const updateTimeout = AbortSignal.timeout(5000)
+void checkForUpdate?.(updateTimeout)
+  .then((status) => {
+    if (!status.updateAvailable) return
+    console.log(`  update  ${status.latest} is available (running ${status.current})`)
+    console.log('          npx @strange-bytes/packui@latest\n')
+  })
+  .catch(() => {})
 
 const shutdown = () => {
   void server.close().then(() => process.exit(0))

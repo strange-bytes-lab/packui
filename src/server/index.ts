@@ -1,13 +1,15 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { homedir } from 'node:os'
+import { resolve } from 'node:path'
 import { createProjectAccess, type RefreshableAccess } from './api/access.ts'
 import { createDepsHandler } from './api/deps.ts'
 import { createEnrichHandler } from './api/enrich.ts'
 import { globalDepsHandler, globalScopesHandler } from './api/globals.ts'
 import { createImpactHandler } from './api/impact.ts'
 import { pruneCache } from './core/cache.ts'
-import { listRecentProjects, recordRecentProject } from './core/recent.ts'
-import { toDisplayPath } from './core/report.ts'
+import { recordRecentProject } from './core/recent.ts'
+import { checkForUpdate } from './core/version.ts'
 import { createMutateHandler, createRollbackHandler, createSnapshotsHandler } from './api/mutate.ts'
 import {
   createChangelogHandler,
@@ -15,6 +17,7 @@ import {
   createPackageHealthHandler,
 } from './api/insights.ts'
 import { createPackageHandler } from './api/package.ts'
+import { createProjectsRoutes } from './api/projects.ts'
 import { createAuditHandler, createWeightHandler } from './api/tree.ts'
 import { createUsageHandler } from './api/usage.ts'
 import { createWorkspaceHandler } from './api/workspace.ts'
@@ -32,15 +35,26 @@ export const DEFAULT_PORT = 7225
 
 const PORT_ATTEMPTS = 20
 
+export { checkForUpdate } from './core/version.ts'
+
 export interface StartOptions {
-  /** Absolute path of the project packui was launched against. */
-  projectPath: string
+  /**
+   * Absolute path of the project packui was launched against, or null when it was
+   * launched somewhere with no package.json. The UI then opens on its project picker.
+   */
+  projectPath: string | null
+  /**
+   * Where the folder picker starts and relative paths resolve from — the directory
+   * the CLI was run in. Defaults to the project, then the home directory.
+   */
+  startDir?: string
   /** Preferred port. Defaults to DEFAULT_PORT; 0 lets the OS pick any free one. */
   port?: number
   /**
    * Record this project in ~/.packui/recent.json and allow switching to the ones
-   * recorded before. The CLI turns this on; tests and embedders leave it off so they
-   * neither write to nor trust the user's history.
+   * recorded before; projects added from the UI are recorded there too. The CLI turns
+   * this on; tests and embedders leave it off so they neither write to nor trust the
+   * user's history (additions then last for the session only).
    */
   rememberProjects?: boolean
 }
@@ -53,25 +67,25 @@ export interface RunningServer {
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-function buildRouter(options: StartOptions, access: RefreshableAccess): Router {
+function buildRouter(
+  options: StartOptions,
+  access: RefreshableAccess,
+  projects: ReturnType<typeof createProjectsRoutes>,
+): Router {
   const router = new Router()
 
   router.get('/api/health', ({ res }) => {
     sendJson(res, 200, { ok: true, projectPath: options.projectPath })
   })
 
+  router.get('/api/version', async ({ res }) => {
+    sendJson(res, 200, await checkForUpdate())
+  })
+
   router.get('/api/workspace', createWorkspaceHandler(access))
 
-  router.get('/api/projects', async ({ res }) => {
-    const recent = options.rememberProjects === true ? await listRecentProjects() : []
-    await access.refresh()
-    const allowed = new Set(access.allowedProjects())
-    sendJson(res, 200, {
-      recent: recent
-        .filter((entry) => allowed.has(entry.path))
-        .map((entry) => ({ ...entry, displayPath: toDisplayPath(entry.path) })),
-    })
-  })
+  router.get('/api/projects', projects.list)
+  router.get('/api/browse', projects.browse)
   router.get('/api/deps', createDepsHandler(access))
   router.get('/api/enrich', createEnrichHandler(access))
   router.get('/api/package', createPackageHandler(access))
@@ -93,6 +107,8 @@ function buildRouter(options: StartOptions, access: RefreshableAccess): Router {
   // mutating methods in the request handler below.
   router.post('/api/mutate', createMutateHandler(access))
   router.post('/api/rollback', createRollbackHandler(access))
+  router.post('/api/projects', projects.add)
+  router.delete('/api/projects', projects.forget)
 
   return router
 }
@@ -102,14 +118,20 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
   // little disk IO costs the user nothing. Not awaited: it must never delay the UI.
   void pruneCache()
 
-  if (options.rememberProjects === true) await recordRecentProject(options.projectPath)
-  const access = createProjectAccess(options.projectPath, async () =>
-    options.rememberProjects === true
-      ? (await listRecentProjects()).map((entry) => entry.path)
-      : [],
+  const remember = options.rememberProjects === true
+  const launched = options.projectPath === null ? null : resolve(options.projectPath)
+  if (remember && launched !== null) await recordRecentProject(launched)
+
+  // The access list and the projects routes need each other: the routes decide what
+  // is trusted, and refresh the list after a change. `trusted` is late-bound for that.
+  let projects: ReturnType<typeof createProjectsRoutes> | null = null
+  const access = createProjectAccess(launched, async () => (await projects?.trusted()) ?? [])
+  projects = createProjectsRoutes(
+    { launched, startDir: resolve(options.startDir ?? launched ?? homedir()), remember },
+    access,
   )
   await access.refresh()
-  const router = buildRouter(options, access)
+  const router = buildRouter(options, access, projects)
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     // The Host header is untrusted; it only ever fills in the base of a URL we parse.

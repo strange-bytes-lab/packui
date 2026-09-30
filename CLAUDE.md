@@ -78,10 +78,18 @@ user's browser can reach `127.0.0.1`.
 - Mutating methods additionally require a loopback `Origin` (DNS-rebinding defense).
 - Static serving must never resolve outside `dist/ui`.
 - Project paths from the client are resolved and checked against an allowlist. It holds
-  the launched project, projects the CLI was launched against before
-  (`~/.packui/recent.json`, written only at CLI boot, never by an API route), and the
-  members of their workspaces as read from the workspace's own config on disk. Nothing
-  a request sends can add to it. Embedders and tests leave `rememberProjects` off.
+  the launched project, projects in `~/.packui/recent.json`, projects added this
+  session, and the members of their workspaces as read from the workspace's own config
+  on disk. Exactly one route adds to it: `POST /api/projects` (`api/projects.ts`). As a
+  POST it already needs the token and a loopback Origin, and it accepts only an
+  existing directory holding a `package.json` outside any `node_modules` — so the list
+  only ever holds projects. No GET changes it. `GET /api/browse` lists directory names
+  for the picker (no contents, no dot folders) and adds nothing. Embedders and tests
+  leave `rememberProjects` off, so additions last for the session and history is
+  neither read nor written.
+- packui may be launched outside any project (`projectPath: null`). Then a request
+  that names no path is refused — it must never fall through to whichever project is
+  most recent — and the UI opens on its picker.
 - Package names and versions are validated before reaching a subprocess, and commands
   are spawned with an argv array and `shell: false`. **There is one validator** —
   `isValidPackageName` in `core/commands.ts` — and every route that takes a name uses
@@ -115,7 +123,7 @@ user's browser can reach `127.0.0.1`.
 
 `test/server.test.ts`, `test/static.test.ts`, `test/markdown.test.ts`,
 `test/mutate.test.ts`, `test/npmrc.test.ts`, `test/spawnable.test.ts`,
-`test/recent.test.ts` and `test/export.test.ts` cover these. Do not weaken them.
+`test/recent.test.ts`, `test/projects.test.ts` and `test/export.test.ts` cover these. Do not weaken them.
 
 ## Mutation model
 
@@ -249,6 +257,11 @@ from `main`, keeps a release PR open with the version they imply, and writes
   actually have advisories pay for it.
 - Every network path degrades to cached data, then to `null`, which the UI renders as
   "not checked" rather than "up to date". Never invent a clean bill of health.
+- The update check (`core/version.ts`) reads packui's own entry through the same
+  abbreviated-packument cache as every dependency, so it costs a 304 at most. It is
+  never awaited at boot, offline means "no update known", and `PACKUI_NO_UPDATE_CHECK`
+  or `NO_UPDATE_NOTIFIER` switch it off. The notice is a command to run, never a
+  self-update.
 - GitHub (release notes, repository status) allows 60 unauthenticated requests an hour.
   Every response is ETag-cached, so revalidation is free; keep it that way, and keep
   whole-tree work (`/api/audit`, `/api/weight`, `/api/usage`) off the table's own load

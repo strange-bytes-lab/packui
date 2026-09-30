@@ -12,7 +12,7 @@ import { resolveAllowedProject, type ProjectAccess } from './access.ts'
  */
 
 async function prepare(url: URL, access: ProjectAccess) {
-  const projectPath = resolveAllowedProject(url.searchParams.get('path'), access.allowedProjects())
+  const projectPath = resolveAllowedProject(url.searchParams.get('path'), access)
   if (projectPath === null) return null
   const [context, manifest] = await Promise.all([
     projectContext(projectPath),

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import AddProjectDialog from '@/components/AddProjectDialog.vue'
 import AlignmentBanner from '@/components/AlignmentBanner.vue'
 import DependencyTable from '@/components/DependencyTable.vue'
 import InsightsDialog, { type InsightsTab } from '@/components/InsightsDialog.vue'
@@ -12,11 +13,13 @@ import { buildReportHtml, downloadReport } from '@/composables/exportReport'
 import { useFilters } from '@/composables/useFilters'
 import { requestMutation, type BatchPackage } from '@/composables/useMutation'
 import {
+  forgetProject,
   load,
   loadGlobalScopes,
   loadRecentProjects,
   loadWorkspace,
   useProject,
+  type RecentProjectSummary,
   type Selection,
 } from '@/stores/useProject'
 import type { DependencyKind, DependencyRow } from '@shared/types'
@@ -35,10 +38,35 @@ const {
   workspace,
   mismatches,
   recentProjects,
+  launched,
+  startDir,
   treeAudit,
   auditing,
   auditError,
 } = useProject()
+
+const isHome = computed(() => selection.value.kind === 'home')
+const addOpen = ref(false)
+
+async function onProjectAdded(added: RecentProjectSummary): Promise<void> {
+  addOpen.value = false
+  await select({ kind: 'project', path: added.path })
+}
+
+/**
+ * Forgetting only edits the list. If the forgotten project is on screen, the view
+ * falls back to where packui started: the launched project, or the picker.
+ */
+async function forget(path: string): Promise<void> {
+  const showing = selection.value.kind === 'project' && report.value?.project.path === path
+  try {
+    await forgetProject(path)
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'Could not update the list'
+    return
+  }
+  if (showing) await select(launched.value === null ? { kind: 'home' } : { kind: 'project' })
+}
 
 const insightsTab = ref<InsightsTab | null>(null)
 
@@ -165,6 +193,11 @@ function onMutationFinished(): void {
 
 async function select(target: Selection): Promise<void> {
   await load(target)
+  if (target.kind === 'home') {
+    workspace.value = null
+    mismatches.value = []
+    return
+  }
   // Switching to a recent project that is not part of the current workspace brings
   // its own workspace (or none) into the sidebar.
   if (target.kind !== 'project' || report.value?.project.scope !== 'project') return
@@ -172,12 +205,18 @@ async function select(target: Selection): Promise<void> {
   if (root !== (workspace.value?.root ?? null)) await loadWorkspace(report.value.project.path)
 }
 
-onMounted(() => {
-  void load({ kind: 'project' })
-  void loadGlobalScopes()
-  void loadWorkspace()
-  void loadRecentProjects()
+onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
+  void loadGlobalScopes()
+  // The project list says whether packui was launched inside a project; outside one it
+  // opens on the picker rather than on whichever project was most recent.
+  await loadRecentProjects()
+  if (launched.value === null) {
+    void load({ kind: 'home' })
+    return
+  }
+  void load({ kind: 'project' })
+  void loadWorkspace()
 })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
@@ -191,10 +230,37 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       :selection="selection"
       :workspace="workspace"
       :recent="recentProjects"
+      :launched="launched"
       @select="select"
+      @add="addOpen = true"
+      @forget="forget"
     />
 
-    <main class="content">
+    <main v-if="isHome" class="content home">
+      <section class="welcome">
+        <h1 class="welcome-title">Open a project</h1>
+        <p class="welcome-body">
+          packui was started in a folder with no <code>package.json</code>. Pick a project you have
+          opened before, or add a folder.
+        </p>
+        <ul v-if="recentProjects.length > 0" class="welcome-list">
+          <li v-for="entry in recentProjects" :key="entry.path">
+            <button
+              type="button"
+              class="welcome-entry"
+              @click="select({ kind: 'project', path: entry.path })"
+            >
+              <span class="welcome-name">{{ entry.name }}</span>
+              <span class="welcome-path">{{ entry.displayPath }}</span>
+            </button>
+          </li>
+        </ul>
+        <button type="button" class="cta" @click="addOpen = true">Add a project folder…</button>
+        <p v-if="error" class="status status--error">{{ error }}</p>
+      </section>
+    </main>
+
+    <main v-else class="content">
       <div class="content-head">
         <header class="toolbar">
           <div class="toolbar-search">
@@ -378,6 +444,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       @select="selectFromInsights"
     />
     <MutationConsole @finished="onMutationFinished" />
+    <AddProjectDialog
+      :open="addOpen"
+      :start-dir="startDir"
+      @close="addOpen = false"
+      @added="onProjectAdded"
+    />
   </div>
 </template>
 
@@ -402,6 +474,64 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 .content-head {
   padding: var(--space-5) var(--space-5) 0;
+}
+
+.home {
+  display: block;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-5);
+}
+
+.welcome {
+  max-inline-size: 560px;
+  margin-inline: auto;
+}
+
+.welcome-title {
+  margin: 0 0 var(--space-2);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.welcome-body {
+  margin: 0 0 var(--space-5);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.welcome-body code {
+  font-family: var(--font-mono);
+}
+
+.welcome-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  inline-size: 100%;
+  padding: var(--space-3);
+  text-align: start;
+}
+
+.welcome-entry:hover {
+  border-color: var(--accent);
+}
+
+.welcome-name {
+  font-weight: 500;
+}
+
+.welcome-path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
 }
 
 /* No block-start padding: it would sit above the sticky header and show rows through. */

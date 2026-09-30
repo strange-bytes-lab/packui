@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ProjectSummary } from '@shared/types'
+import UpdateNotice from '@/components/UpdateNotice.vue'
 import { useTheme } from '@/composables/useTheme'
 import { computed } from 'vue'
 import type {
@@ -15,6 +16,8 @@ const props = defineProps<{
   selection: Selection
   workspace?: WorkspaceSummary | null
   recent?: readonly RecentProjectSummary[]
+  /** The launched project; null when packui was started outside one. */
+  launched?: string | null
 }>()
 
 /** Recent projects not already listed above, as the workspace or the project entry. */
@@ -29,7 +32,20 @@ function isCurrent(path: string): boolean {
   return props.selection.kind === 'project' && props.project?.path === path
 }
 
-const emit = defineEmits<{ select: [target: Selection] }>()
+const emit = defineEmits<{ select: [target: Selection]; add: []; forget: [path: string] }>()
+
+/**
+ * The single-project entry. It names the project on screen; while a global scope is
+ * shown it leads back to the launched project, and outside any project there is
+ * nothing to lead back to, so it is not shown.
+ */
+const projectEntry = computed(() => {
+  if (props.selection.kind === 'project' && props.project?.scope === 'project') {
+    return { name: props.project.name, path: props.project.path, pm: props.project.packageManager }
+  }
+  if (props.launched === null || props.launched === undefined) return null
+  return { name: 'Project', path: props.launched, pm: null }
+})
 
 const { theme, themes } = useTheme()
 
@@ -42,7 +58,10 @@ function scopeHint(scope: GlobalScopeSummary): string {
 
 <template>
   <aside class="sidebar">
-    <div class="brand">packui</div>
+    <header class="brand-block">
+      <div class="brand">packui</div>
+      <UpdateNotice />
+    </header>
 
     <!--
       A workspace replaces the single project entry: the launched project is one of its
@@ -66,31 +85,38 @@ function scopeHint(scope: GlobalScopeSummary): string {
       </ul>
     </nav>
 
-    <nav v-else class="section">
+    <nav v-else-if="projectEntry" class="section">
       <span class="section-label">Project</span>
-      <ul v-if="project" class="list">
+      <ul class="list">
         <li>
           <button
             type="button"
             class="entry"
             :aria-current="selection.kind === 'project'"
-            @click="emit('select', { kind: 'project' })"
+            @click="emit('select', { kind: 'project', path: projectEntry.path })"
           >
-            <span class="entry-name">{{
-              selection.kind === 'project' ? project.name : 'Project'
-            }}</span>
-            <span v-if="project.packageManager && selection.kind === 'project'" class="pm">
-              {{ project.packageManager }}
-            </span>
+            <span class="entry-name">{{ projectEntry.name }}</span>
+            <span v-if="projectEntry.pm" class="pm">{{ projectEntry.pm }}</span>
           </button>
         </li>
       </ul>
     </nav>
 
-    <nav v-if="otherRecent.length > 0" class="section">
-      <span class="section-label">Recent</span>
-      <ul class="list">
-        <li v-for="entry in otherRecent" :key="entry.path">
+    <nav class="section" aria-label="Recent projects">
+      <div class="section-head">
+        <span class="section-label">Recent</span>
+        <button
+          type="button"
+          class="add"
+          title="Add a project folder"
+          aria-label="Add a project folder"
+          @click="emit('add')"
+        >
+          + Add
+        </button>
+      </div>
+      <ul v-if="otherRecent.length > 0" class="list">
+        <li v-for="entry in otherRecent" :key="entry.path" class="recent">
           <button
             type="button"
             class="entry"
@@ -99,9 +125,21 @@ function scopeHint(scope: GlobalScopeSummary): string {
           >
             <span class="entry-name">{{ entry.name }}</span>
           </button>
+          <button
+            type="button"
+            class="forget"
+            :title="`Remove ${entry.name} from this list (its files are untouched)`"
+            :aria-label="`Remove ${entry.name} from recent projects`"
+            @click="emit('forget', entry.path)"
+          >
+            ×
+          </button>
           <span class="entry-hint">{{ entry.displayPath }}</span>
         </li>
       </ul>
+      <button v-else type="button" class="add-empty" @click="emit('add')">
+        Add a project folder
+      </button>
     </nav>
 
     <nav v-if="scopes.length > 0" class="section">
@@ -147,6 +185,78 @@ function scopeHint(scope: GlobalScopeSummary): string {
 .brand {
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.add {
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.add:hover {
+  color: var(--accent);
+}
+
+.add-empty {
+  inline-size: 100%;
+  padding: var(--space-2);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.add-empty:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.recent {
+  position: relative;
+}
+
+.recent .entry {
+  padding-inline-end: var(--space-5);
+}
+
+/* Always reachable by keyboard; shown on hover or focus so the list stays quiet. */
+.forget {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 4px;
+  padding: 0 var(--space-1);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.recent:hover .forget,
+.forget:focus-visible {
+  opacity: 1;
+}
+
+.forget:hover {
+  color: var(--danger);
 }
 
 .section-label {
