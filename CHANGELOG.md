@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/strange-bytes-lab/packui/compare/packui-v0.2.0...packui-v0.3.0) (2026-09-30)
+
+
+### Features
+
+* audit the whole installed tree, weigh it, and find unused dependencies ([f9863f1](https://github.com/strange-bytes-lab/packui/commit/f9863f16ec89abeff957733a16236ad1b7451306))
+* check compatibility, show release notes and package health before upgrading ([9b19ea7](https://github.com/strange-bytes-lab/packui/commit/9b19ea732922c37576c6b4638f96b0a6d647a156))
+* export the table as a self-contained HTML report ([1f14d97](https://github.com/strange-bytes-lab/packui/commit/1f14d972f9edf559ed61804b955d9c6eab552937))
+* look packages up in the registry .npmrc maps them to ([5e8adb2](https://github.com/strange-bytes-lab/packui/commit/5e8adb27f68c9632a955ebb3c656f6583e890984))
+* support npm, pnpm, yarn and bun workspaces ([472829b](https://github.com/strange-bytes-lab/packui/commit/472829bcba7147b47f2066b4aacbbf90ee50e89d))
+* support Windows ([fb6c04a](https://github.com/strange-bytes-lab/packui/commit/fb6c04a0530a271dd59fcf87004816b07a0101a4))
+* switch between recently opened projects ([dbc2042](https://github.com/strange-bytes-lab/packui/commit/dbc2042e1b96e18119ac8d8e977f57bbefb96fc0))
+
+
+### Fixes
+
+* compare lockfile contents instead of timestamps for the out-of-sync warning ([4c62617](https://github.com/strange-bytes-lab/packui/commit/4c62617872bfca0b61eda976904a3c8fc1a8e889))
+* report source file paths with forward slashes on Windows ([cc8ff47](https://github.com/strange-bytes-lab/packui/commit/cc8ff47bdc35fbcdd311ead65aaa49688736f3e2))
+
+
+### Documentation
+
+* describe workspaces, insights, registries and Windows support ([46cda82](https://github.com/strange-bytes-lab/packui/commit/46cda82b7e5af4a432a3d7d4d7443e7eddf37fdf))
+
 ## [0.2.0](https://github.com/strange-bytes-lab/packui/compare/packui-v0.1.0...packui-v0.2.0) (2026-09-21)
 
 
