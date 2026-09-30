@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/strange-bytes-lab/packui/compare/packui-v0.3.0...packui-v0.4.0) (2026-09-30)
+
+
+### Features
+
+* run anywhere and add project folders from the UI ([d27a718](https://github.com/strange-bytes-lab/packui/commit/d27a718bd875d34d842ea1173ea643ef11d9dc7b))
+* show a quiet notice when a newer packui is published ([d27a718](https://github.com/strange-bytes-lab/packui/commit/d27a718bd875d34d842ea1173ea643ef11d9dc7b))
+
 ## [0.3.0](https://github.com/strange-bytes-lab/packui/compare/packui-v0.2.0...packui-v0.3.0) (2026-09-30)
 
 
