@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { isDirectoryLike } from './fsutil.ts'
+import { toPosix } from './workspace.ts'
 
 /**
  * Finds where a package is actually used before packui offers to remove it.
@@ -31,7 +32,10 @@ const MAX_FILES = 4000
 const MAX_FILE_BYTES = 1024 * 1024
 
 export interface Usage {
-  /** Path relative to the project root. */
+  /**
+   * Path relative to the project root, always with `/`. It is display text and is
+   * never joined back into a filesystem path, so it reads the same on every platform.
+   */
   file: string
   line: number
   snippet: string
@@ -120,7 +124,7 @@ export async function findUsages(projectPath: string, packageName: string): Prom
       lines.forEach((line, index) => {
         if (!matcher.test(line)) return
         usages.push({
-          file: relative(projectPath, file),
+          file: toPosix(relative(projectPath, file)),
           line: index + 1,
           snippet: line.trim().slice(0, 200),
         })
@@ -269,7 +273,7 @@ export async function scanImports(
           if (name === null) continue
           const list = imports.get(name) ?? []
           list.push({
-            file: relative(projectPath, file),
+            file: toPosix(relative(projectPath, file)),
             line: index + 1,
             snippet: line.trim().slice(0, 200),
           })

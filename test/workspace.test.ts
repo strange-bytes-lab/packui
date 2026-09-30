@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildBatchCommands, buildCommand } from '../src/server/core/commands.ts'
 import { lookupDirectories } from '../src/server/core/installed.ts'
@@ -12,6 +12,7 @@ import {
   findWorkspace,
   readPnpmWorkspacePatterns,
   readWorkspace,
+  toPosix,
 } from '../src/server/core/workspace.ts'
 import { startServer, type RunningServer } from '../src/server/index.ts'
 import { sessionToken } from '../src/server/security.ts'
@@ -86,7 +87,8 @@ describe('workspace detection', () => {
         './tools/cli',
         '../outside',
       ])
-      expect(found.map((path) => path.slice(dir.length + 1))).toEqual([
+      // Compared as POSIX paths: the result holds native absolute paths.
+      expect(found.map((path) => toPosix(relative(dir, path)))).toEqual([
         'apps/web',
         'packages/deep/nested',
         'tools/cli',
