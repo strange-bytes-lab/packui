@@ -110,6 +110,6 @@ describe('GET /api/usage', () => {
     const { undeclared } = await audit()
     expect(undeclared.map((entry) => entry.name)).toEqual(['phantom'])
     expect(undeclared[0]?.installed).toBe('1.0.0')
-    expect(undeclared[0]?.usages[0]?.file).toBe(join('src', 'index.ts'))
+    expect(undeclared[0]?.usages[0]?.file).toBe('src/index.ts')
   })
 })
